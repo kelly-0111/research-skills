@@ -4,7 +4,7 @@ Author: Kelly S.
 Status: draft / internal testing  
 Created: 2026-05-25
 
-这是一个可分享的投研 skills 包，包含两个可复用 workflow：
+这是一个可分享的投研 skills 包，暂时包含两个可复用 workflow：
 
 | Skill | 中文名 | 用途 |
 | --- | --- | --- |
