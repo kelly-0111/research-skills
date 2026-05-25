@@ -1,0 +1,7 @@
+interface:
+  display_name: "创新药管线结构化"
+  short_description: "把创新药资料整理为公司、靶点、管线、进展和催化剂表"
+  default_prompt: "Use $drug-pipeline-structuring to structure these innovative-drug materials into company, pipeline, target, progress, catalyst, and verification tables."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "股票异动监控"
+  short_description: "生成A股自选股每日异动监控日报"
+  default_prompt: "Use $stock-move-monitor to run today's A-share watchlist abnormal-move brief."
+
+policy:
+  allow_implicit_invocation: true
