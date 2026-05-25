@@ -1,8 +1,0 @@
-interface:
-  display_name: "医药股上涨逻辑"
-  short_description: "复盘医药/创新药行情上涨逻辑、催化剂、资金轮动和风险信号"
-  default_prompt: "Use $pharma-rally-logic to review pharma/innovative-drug stock rally logic, catalysts, rally stage, and risk signals."
-
-policy:
-  allow_implicit_invocation: true
-

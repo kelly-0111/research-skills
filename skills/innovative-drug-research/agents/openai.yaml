@@ -1,0 +1,8 @@
+interface:
+  display_name: "创新药投研助手"
+  short_description: "结构化创新药管线，并复盘医药股上涨逻辑"
+  default_prompt: "Use $innovative-drug-research to structure innovative-drug pipeline facts and, when needed, connect them to pharma stock rally logic and risk signals."
+
+policy:
+  allow_implicit_invocation: true
+

@@ -4,13 +4,12 @@ Author: Kelly S.
 Status: draft / internal testing  
 Created: 2026-05-25
 
-这是一个可分享的投研 skills 包，包含三个可复用 workflow：
+这是一个可分享的投研 skills 包，包含两个可复用 skill；其中 `innovative-drug-research` 内含「管线结构化」和「上涨逻辑复盘」两个子模块：
 
 | Skill | 中文名 | 用途 |
 | --- | --- | --- |
 | `stock-move-monitor` | 股票异动监控 | 根据自选股列表生成每日异动监控 CSV 和 Markdown 日报 |
-| `drug-pipeline-structuring` | 创新药管线结构化 | 将创新药资料整理成公司池、管线进展表、催化剂表和待确认清单 |
-| `pharma-rally-logic` | 医药股上涨逻辑复盘 | 复盘医药/创新药行情上涨逻辑、资金轮动、事件催化、板块阶段和风险信号 |
+| `innovative-drug-research` | 创新药投研助手 | 结构化创新药管线，并复盘医药股上涨逻辑、资金轮动、事件催化和风险信号 |
 
 ## 目录
 
@@ -19,8 +18,7 @@ investment_research_skills_share_package/
 ├── README.md
 ├── skills/
 │   ├── stock-move-monitor/
-│   ├── drug-pipeline-structuring/
-│   └── pharma-rally-logic/
+│   └── innovative-drug-research/
 ├── scripts/
 ├── templates/
 └── examples/
@@ -44,27 +42,21 @@ python3 scripts/run_daily_monitor.py \
   --output-dir outputs/stock_move_monitor
 ```
 
-### 创新药管线结构化
+### 创新药投研助手
 
 准备 Markdown 公司列表或行业资料，运行：
 
 ```bash
-python3 skills/drug-pipeline-structuring/scripts/build_pipeline_seed.py \
+python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
   --company-list /path/to/company_list.md \
-  --out-dir outputs/innovative_drug_structuring
+  --out-dir outputs/innovative_drug_research
 ```
 
-### 医药股上涨逻辑复盘
-
-使用 `skills/pharma-rally-logic/` 中的 workflow 和模板，整理医药/创新药行情：
+使用 `skills/innovative-drug-research/` 中的两个子模块，既可以整理创新药靶点和进展，也可以分析医药股上涨逻辑：
 
 ```text
-股票池/板块走势/事件材料
-→ 上涨逻辑拆解
-→ 行情阶段判断
-→ 个股异动归因
-→ 风险信号
-→ 复盘报告
+管线结构化：公司/药物/靶点/阶段/进展/催化剂
+上涨逻辑复盘：事件催化/资金轮动/行情阶段/风险信号
 ```
 
 ## 分享注意
