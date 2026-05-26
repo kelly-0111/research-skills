@@ -35,6 +35,9 @@ Important fields:
 | `main_net_yi` | Main net inflow in RMB 100m, as reported by data source |
 | `main_net_pct` | Main net inflow percentage, as reported by data source |
 | `streak` | Positive for consecutive up days, negative for consecutive down days |
+| `latest_kline_date` | Latest available K-line date |
+| `kline_status` | `ok` or `failed` |
+| `data_quality` | Whether quote/K-line-derived fields are complete |
 | `is_abnormal` | `是` when any abnormal signal triggers |
 | `abnormal_type` | Semicolon-separated signal labels |
 | `confidence` | Simple heuristic confidence: `高`, `中`, or `低` |

@@ -15,6 +15,7 @@ import ssl
 import sys
 import time
 import argparse
+import socket
 from http.client import RemoteDisconnected
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,7 +48,14 @@ class Stock:
         return f"{self.market}.{self.code}"
 
 
-def fetch_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
+def fetch_json(
+    url: str,
+    params: dict[str, Any],
+    *,
+    attempts: int = 3,
+    timeout: int = 15,
+    base_sleep: float = 1.5,
+) -> dict[str, Any]:
     full_url = f"{url}?{urlencode(params)}"
     req = Request(
         full_url,
@@ -59,15 +67,15 @@ def fetch_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
     # The local Python install may lack system CA roots. Limit this to public market-data pulls.
     context = ssl._create_unverified_context()
     last_error: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
-            with urlopen(req, timeout=15, context=context) as resp:
+            with urlopen(req, timeout=timeout, context=context) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, RemoteDisconnected) as exc:
+        except (HTTPError, URLError, TimeoutError, socket.timeout, RemoteDisconnected) as exc:
             last_error = exc
-            if attempt == 2:
+            if attempt == attempts - 1:
                 break
-            time.sleep(1.5 * (attempt + 1))
+            time.sleep(base_sleep * (attempt + 1))
     raise RuntimeError(f"Failed to fetch {url}: {last_error}") from last_error
 
 
@@ -124,7 +132,7 @@ def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
         "beg": "20240101",
         "end": "20500101",
     }
-    data = fetch_json(KLINE_URL, params)
+    data = fetch_json(KLINE_URL, params, attempts=5, timeout=25, base_sleep=2.0)
     raw = ((data.get("data") or {}).get("klines")) or []
     out: list[dict[str, Any]] = []
     for line in raw:
@@ -230,11 +238,15 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for i, stock in enumerate(stocks, 1):
         quote = quotes.get(stock.code, {})
+        kline_status = "ok"
+        kline_error = ""
         try:
             klines = fetch_klines(stock)
         except RuntimeError as exc:
             print(f"kline failed for {stock.code} {stock.name}: {exc}", file=sys.stderr)
             klines = []
+            kline_status = "failed"
+            kline_error = str(exc)
         recent = klines[-21:]
         amounts = [r["amount"] for r in recent[:-1] if not math.isnan(r["amount"])]
         ma20_amount = sum(amounts) / len(amounts) if amounts else math.nan
@@ -261,6 +273,9 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
             "main_net_pct": as_float(quote.get("f184")),
             "streak": calculate_streak(klines),
             "latest_kline_date": latest_kline_date,
+            "kline_status": kline_status,
+            "data_quality": "完整" if kline_status == "ok" else "K线缺失：量比/连续涨跌不可用",
+            "kline_error": kline_error,
             "keywords": stock.keywords,
         }
         flags, confidence, reason, next_action = classify(row, stock)
@@ -298,6 +313,8 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
         "main_net_pct",
         "streak",
         "latest_kline_date",
+        "kline_status",
+        "data_quality",
         "is_abnormal",
         "abnormal_type",
         "confidence",
@@ -344,12 +361,14 @@ def markdown_table(rows: list[dict[str, Any]], limit: int = 20) -> str:
 def write_report(rows: list[dict[str, Any]], path: Path, generated_at: str) -> None:
     abnormal = [r for r in rows if r["is_abnormal"] == "是"]
     top = abnormal[:8] if abnormal else rows[:5]
+    incomplete = [r for r in rows if r.get("kline_status") != "ok"]
     lines = [
         "# 每日异动监控简报",
         "",
         f"- 生成时间：{generated_at}",
         f"- 股票池数量：{len(rows)}",
         f"- 触发异动数量：{len(abnormal)}",
+        f"- K线数据不完整数量：{len(incomplete)}",
         "- 数据源：东方财富公开行情/K线接口",
         "- 说明：本报告用于投研 workflow 测试，不构成投资建议；原因分析为待核验线索。",
         "",
@@ -384,6 +403,22 @@ def write_report(rows: list[dict[str, Any]], path: Path, generated_at: str) -> N
             "",
         ]
     )
+    if incomplete:
+        lines.extend(
+            [
+                "## 四、数据质量提示",
+                "",
+                "以下股票本次 K 线接口请求失败，实时报价仍可用，但量比/连续涨跌/最新K线日期字段不完整：",
+                "",
+                "| 股票 | 行业 | 今日涨跌幅 | 说明 |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for row in incomplete:
+            lines.append(
+                f"| {row['code']} {row['name']} | {row['industry']} | {pct(row['pct_chg'])} | {row.get('data_quality', '')} |"
+            )
+        lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
