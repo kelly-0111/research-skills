@@ -9,18 +9,28 @@ description: End-to-end innovative-drug investment research workflow. Use when C
 
 Use this skill as the main workflow for innovative-drug investment research. It has two modules:
 
-1. **Pipeline structuring**: build the factual base.
-2. **Rally logic**: explain stock-price moves using facts, events, sentiment, and liquidity.
+1. **Source intake**: collect and classify source materials.
+2. **Pipeline structuring**: build the factual base.
+3. **Rally logic**: explain stock-price moves using facts, events, sentiment, and liquidity.
 
 Keep these modules connected but distinct:
 
 ```text
-pipeline facts → catalysts/progress → rally logic → risk signals
+source materials → pipeline facts → catalysts/progress → rally logic → risk signals
 ```
 
 Do not invent drug facts or stock-move causes. Mark uncertain information as `待确认` or `待核验线索`.
 
 ## Module Selection
+
+Use **source intake** when the user asks to:
+
+- add more real materials for tracking targeted innovative-drug development
+- decide whether to use APIs or manual source folders
+- standardize announcements, pipeline pages, annual reports, clinical registries, conference abstracts, or research reports
+- create or update a source manifest
+
+Read `references/source_intake.md` and `references/schemas.md`.
 
 Use **pipeline structuring** when the user asks to:
 
@@ -42,14 +52,16 @@ Read `references/rally_logic.md`.
 
 Use **both modules** when the user asks to connect drug progress to stock moves:
 
-1. Create or update the pipeline/catalyst facts.
-2. Use those facts as inputs for rally-stage and stock-move interpretation.
-3. Separate confirmed facts, inference, and verification leads.
+1. Register source materials in the source manifest.
+2. Create or update the pipeline/catalyst facts.
+3. Use those facts as inputs for rally-stage and stock-move interpretation.
+4. Separate confirmed facts, inference, and verification leads.
 
 ## Default Outputs
 
 For pipeline structuring:
 
+- `source_manifest.csv`
 - `company_master.csv`
 - `pipeline_progress.csv`
 - `catalyst_tracker.csv`
@@ -83,4 +95,3 @@ This creates first-pass company, pipeline seed, catalyst seed, and verification 
 - Split multi-drug or multi-indication rows when enough detail exists.
 - For stock-move explanations, label unsupported causes as `待核验线索`.
 - Make outputs updateable rather than one-off summaries.
-

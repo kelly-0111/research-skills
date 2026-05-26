@@ -16,6 +16,7 @@ Created: 2026-05-25
 ```text
 investment_research_skills_share_package/
 ├── README.md
+├── data/
 ├── skills/
 │   ├── stock-move-monitor/
 │   └── innovative-drug-research/
@@ -57,6 +58,18 @@ python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
 ```text
 管线结构化：公司/药物/靶点/阶段/进展/催化剂
 上涨逻辑复盘：事件催化/资金轮动/行情阶段/风险信号
+```
+
+如果要持续跟踪靶向创新药发展，先把资料放入：
+
+```text
+data/innovative_drug_sources/
+```
+
+再用这个模板登记来源、可信度和要抽取的字段：
+
+```text
+templates/innovative_drug_source_manifest_template.csv
 ```
 
 ## 分享注意

@@ -1,5 +1,23 @@
 # Schema
 
+## source_manifest.csv
+
+| Field | Meaning |
+| --- | --- |
+| source_id | Stable source ID, such as `SRC-001` |
+| source_type | company_announcement、clinical_registry、company_pipeline_page、annual_report、conference_abstract、research_report、news、other |
+| source_title | Source title |
+| source_path_or_url | Local path or URL |
+| publish_date | Source publication date or `待确认` |
+| company_name | Related company or `待确认` |
+| drug_or_pipeline | Related drug/pipeline or `待确认` |
+| target | Related target or `待确认` |
+| indication | Related indication or `待确认` |
+| source_confidence | 高、中、低、待确认 |
+| extract_priority | 高、中、低 |
+| fields_to_extract | Semicolon-separated target fields |
+| notes | Intake and verification notes |
+
 ## company_master.csv
 
 | Field | Meaning |
@@ -48,4 +66,3 @@
 | expected_impact | Research significance |
 | source | Source file |
 | updated_at | Output date |
-

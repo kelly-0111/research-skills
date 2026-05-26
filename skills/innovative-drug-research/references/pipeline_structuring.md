@@ -23,11 +23,12 @@ Use this module to build the innovative-drug factual base.
 
 ## Recommended First Pass
 
-1. Build company pool from lists and reports.
-2. Select priority scope by modality, target, or company.
-3. Extract pipeline facts from higher-confidence sources.
-4. Extract catalysts from research decks and announcements.
-5. Create verification queue for missing facts.
+1. Register sources in `source_manifest.csv`.
+2. Build company pool from lists and reports.
+3. Select priority scope by modality, target, or company.
+4. Extract pipeline facts from higher-confidence sources.
+5. Extract catalysts from research decks and announcements.
+6. Create verification queue for missing facts.
 
 ## Field Extraction Rules
 
@@ -47,4 +48,3 @@ For broad innovative-drug tasks, do not start with all companies. Pick 5-10 comp
 - GLP-1
 - BTK
 - small nucleic acid drugs
-
