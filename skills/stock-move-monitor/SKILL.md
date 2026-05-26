@@ -25,8 +25,11 @@ python3 scripts/run_daily_monitor.py
 
 - `daily_report_YYYY-MM-DD.md`
 - `daily_monitor_YYYY-MM-DD.csv`
+- `cause_check_YYYY-MM-DD.csv`
 
 If network access is blocked or SSL CA verification fails, request permission to access the public market-data endpoint. The bundled script uses an unverified SSL context only for public quote/K-line pulls because some local Python installs lack CA roots.
+
+The default script does not require `adata` or any third-party market-data SDK. If adding `adata` later, keep it optional and preserve the no-SDK fallback. Read `references/data_providers.md` before changing data providers.
 
 ## Workflow
 
@@ -35,6 +38,7 @@ If network access is blocked or SSL CA verification fails, request permission to
 
 2. **Fetch market data**
    Pull real-time quote fields and daily K-lines. Keep the script's data-source note in the report.
+   The default provider is the bundled no-SDK Eastmoney public endpoint path. Optional SDKs such as `adata` must not become required for the share package.
 
 3. **Calculate signals**
    Default signals:
@@ -43,10 +47,13 @@ If network access is blocked or SSL CA verification fails, request permission to
    - 3 or more consecutive up/down days
    - absolute main fund-flow percentage >= 8%
 
-4. **Generate the report**
+4. **Build cause-check queue**
+   For abnormal rows, generate search queries, run automatic news RSS search, record matched titles/links, source priority, cause categories, evidence status, and judgement labels. Read `references/cause_checking.md` when changing news/announcement retrieval.
+
+5. **Generate the report**
    Prioritize abnormal rows first. Include table columns for code/name, industry, pct change, amount, amount ratio, main net inflow, abnormal type, and confidence.
 
-5. **Write analyst follow-ups**
+6. **Write analyst follow-ups**
    For each abnormal stock, list keywords and tracking points. Phrase suspected causes as "核验线索" unless backed by announcements/news/research citations.
 
 ## Customization
@@ -54,9 +61,12 @@ If network access is blocked or SSL CA verification fails, request permission to
 - Change thresholds in `data/watchlist.csv` per stock.
 - Add stocks by appending rows to the watchlist.
 - For industry-relative performance, add a benchmark column and extend the script to fetch index/ETF K-lines.
-- For source-backed cause analysis, add a news/announcement retrieval step after abnormal rows are detected.
+- For source-backed cause analysis, fill `cause_check_YYYY-MM-DD.csv` with retrieved announcement/news titles, URLs, dates, and confidence labels.
+- Use `--skip-news-search` only when the network is blocked or a dry run is needed.
 
 ## Bundled Resources
 
 - `scripts/run_daily_monitor.py`: runnable A-share abnormal-move monitor.
 - `references/schema.md`: watchlist and output-field schema.
+- `references/cause_checking.md`: source priority and judgement labels for abnormal-move cause checks.
+- `references/data_providers.md`: default no-SDK provider and optional `adata` fallback rules.

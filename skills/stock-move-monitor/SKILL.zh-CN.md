@@ -25,8 +25,11 @@ python3 scripts/run_daily_monitor.py
 
 - `daily_report_YYYY-MM-DD.md`：每日异动监控简报
 - `daily_monitor_YYYY-MM-DD.csv`：异动明细表
+- `cause_check_YYYY-MM-DD.csv`：异动原因核验队列
 
 如果网络访问被限制，或 Python 本地证书校验失败，需要允许访问公开行情接口。脚本只在访问公开行情/K 线数据时使用非校验证书上下文，这是为了兼容部分本地 Python 缺少 CA 根证书的环境。
+
+默认脚本不依赖 `adata`，也不依赖其他第三方行情 SDK。以后如果接入 `adata`，也只能作为可选增强，必须保留当前这个无 SDK 备份路径。调整数据源前先看 `references/data_providers.md`。
 
 ## 自选股表格式
 
@@ -66,6 +69,12 @@ data/watchlist.csv
 - `中`：价格异动、放量异动或资金异动至少触发一个
 - `低`：主要是连续涨跌等弱信号
 
+## 数据源策略
+
+基础版使用脚本内置的东方财富公开行情/K 线接口，不要求安装 `adata`。这样同事拿到 share package 后，只要本地 Python 可联网，就能先跑起来。
+
+`adata` 可以作为后续可选增强，用于实时行情交叉验证、指数/概念行情和板块联动分析。但不要把它写成必装依赖；如果 `adata` 不可用、返回空表或网络失败，脚本应回退到无 SDK 路径，并在日报里标注数据质量。
+
 ## 输出文件
 
 ### Markdown 日报
@@ -81,7 +90,8 @@ outputs/daily_report_YYYY-MM-DD.md
 1. 生成时间、股票池数量、触发异动数量、数据源和免责声明
 2. 今日重点异动表
 3. 个股异动分析
-4. 明日重点关注清单
+4. 异动原因核验
+5. 明日重点关注清单
 
 ### CSV 明细表
 
@@ -109,6 +119,27 @@ outputs/daily_monitor_YYYY-MM-DD.csv
 | `reason_hint` | 初步原因线索，不是确认原因 |
 | `next_action` | 后续跟踪事项 |
 
+### 原因核验表
+
+默认路径：
+
+```text
+outputs/cause_check_YYYY-MM-DD.csv
+```
+
+这张表用于承接“自动搜索新闻/公告并分析原因”的第 2 步。当前版本先自动生成：
+
+- 异动股票
+- 原因分类
+- 优先查证来源
+- 搜索关键词
+- 新闻 RSS 检索词
+- 匹配新闻标题、链接、发布时间
+- 证据状态
+- 原因判断
+
+默认会自动检索新闻 RSS；如果网络不可用，会标注 `检索失败`，但不会中断日报生成。在没有公告、新闻标题、链接或文件路径前，`cause_judgement` 只能写 `待核验线索`。即使检索到新闻，也优先写成 `高相关线索`，不要直接写成确认原因，除非来源和时间都能对应。
+
 ## URL 说明
 
 脚本中的两个 URL 不是网页，而是程序接口：
@@ -128,7 +159,8 @@ KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 - 想换股票池：编辑 `data/watchlist.csv`
 - 想改异动敏感度：调整每只股票的 `pct_threshold` 和 `amount_ratio_threshold`
 - 想加行业相对表现：给自选股表增加行业指数或 ETF 字段，再扩展脚本
-- 想自动解释原因：先检测异动，再接入公告、新闻、研报搜索，并给每条解释附来源
+- 想自动解释原因：先使用 `cause_check_YYYY-MM-DD.csv` 生成核验队列，再接入公告、新闻、研报搜索，并给每条解释附来源
+- 想跳过新闻检索：运行脚本时加 `--skip-news-search`
 
 ## 运行时注意
 

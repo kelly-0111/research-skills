@@ -43,6 +43,8 @@ python3 scripts/run_daily_monitor.py \
   --output-dir outputs/stock_move_monitor
 ```
 
+基础版不需要安装 `adata` 或其他行情 SDK，默认使用脚本内置的公开行情接口。`adata` 可以作为本机可选增强，但不作为 share package 的必装依赖。
+
 ### 创新药投研助手
 
 准备 Markdown 公司列表或行业资料，运行：

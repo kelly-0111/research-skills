@@ -44,6 +44,34 @@ Important fields:
 | `reason_hint` | Verification lead, not a confirmed cause |
 | `next_action` | Analyst follow-up items |
 
+## Cause Check Table
+
+Default file: `outputs/cause_check_YYYY-MM-DD.csv`
+
+| Column | Meaning |
+|---|---|
+| `date` | Run date |
+| `code` | Stock code |
+| `name` | Security name |
+| `industry` | Sector label |
+| `theme` | Watchlist theme |
+| `abnormal_type` | Triggered abnormal signals |
+| `pct_chg` | Percent change |
+| `amount_ratio` | Current amount / trailing 20-day average |
+| `cause_categories` | Candidate cause tags |
+| `source_priority` | Source-check order |
+| `search_queries` | Generated search queries for news/announcement retrieval |
+| `news_search_query` | Query used by automatic news RSS search |
+| `matched_news_count` | Number of matched news items |
+| `evidence_status` | `待检索`, `已检索`, or `未发现明确来源` |
+| `cause_judgement` | `已确认原因`, `高相关线索`, `待核验线索`, or `无明显新闻` |
+| `confidence` | Cause confidence after source review |
+| `evidence_summary` | Short summary of matched source titles |
+| `source_title` | Supporting source title |
+| `source_url_or_path` | URL or local path |
+| `published_at` | Source publish date/time |
+| `notes` | Verification notes |
+
 ## Report Standard
 
 The Markdown brief should include:
@@ -51,4 +79,9 @@ The Markdown brief should include:
 1. Run metadata: generated time, stock count, abnormal count, data source, disclaimer.
 2. Today's key abnormal moves table.
 3. Individual stock notes for the top abnormal rows.
-4. Tomorrow's follow-up checklist.
+4. Abnormal-move cause-check table.
+5. Tomorrow's follow-up checklist.
+
+## Dependency Standard
+
+The base monitor should require only Python standard-library modules. Optional providers such as `adata` can be documented or added later, but CSV/report generation must still work without them.
