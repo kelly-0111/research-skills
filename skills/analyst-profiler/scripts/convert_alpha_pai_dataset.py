@@ -11,6 +11,7 @@ from typing import Any
 
 
 OUTPUT_FIELDS = [
+    "analyst_id",
     "analyst_name",
     "broker",
     "sector",
@@ -200,6 +201,7 @@ def convert_row(row: dict[str, str]) -> dict[str, str]:
     if team_track_id:
         analyst_name = f"{analyst_name} [{team_track_id}]"
     return {
+        "analyst_id": team_track_id,
         "analyst_name": analyst_name,
         "broker": clean(row.get("institution")) or "待确认",
         "sector": clean(row.get("sector")) or "待确认",

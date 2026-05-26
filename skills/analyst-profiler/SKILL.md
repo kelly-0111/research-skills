@@ -61,15 +61,23 @@ Read `references/schema.md` for fields.
 
 ## Running The Scorer
 
+If the input is a standard `analyst_call_log.csv`, run the scorer directly:
+
+```bash
+python3 skills/analyst-profiler/scripts/score_analysts.py \
+  --input /path/to/analyst_call_log.csv \
+  --out-dir outputs/analyst_profiler
+```
+
 If the input is an Alpha Pai exported analyst dataset, convert it first:
 
 ```bash
 python3 skills/analyst-profiler/scripts/convert_alpha_pai_dataset.py \
-  --input /path/to/analyst_call_log_template.csv \
+  --input /path/to/alpha_pai_export.csv \
   --output outputs/analyst_profiler/analyst_call_log_converted.csv
 ```
 
-Then run:
+Then run the scorer on the converted file:
 
 ```bash
 python3 skills/analyst-profiler/scripts/score_analysts.py \

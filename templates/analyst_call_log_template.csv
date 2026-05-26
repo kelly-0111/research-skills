@@ -1,2 +1,2 @@
-analyst_name,broker,sector,report_date,stock_code,stock_name,rating_action,call_direction,thesis_type,event_lag_days,horizon_days,forward_return_pct,benchmark_return_pct,excess_return_pct,forecast_revision_direction,depth_score,evidence_score,originality_score,source_title,source_path_or_url,notes
-示例研究员A,示例证券,创新药,2026-05-01,600000,示例公司,upgrade,bullish,event,1,20,12,3,,up,3,4,3,示例报告标题,/path/to/report.pdf,示例行，替换为真实来源
+analyst_id,analyst_name,broker,sector,report_date,stock_code,stock_name,rating_action,call_direction,thesis_type,event_lag_days,horizon_days,forward_return_pct,benchmark_return_pct,excess_return_pct,forecast_revision_direction,depth_score,evidence_score,originality_score,source_title,source_path_or_url,notes
+ANALYST_A,示例研究员A,示例证券,创新药,2026-05-01,600000,示例公司,upgrade,bullish,event,1,20,12,3,,up,3,4,3,示例报告标题,/path/to/report.pdf,示例行，替换为真实来源

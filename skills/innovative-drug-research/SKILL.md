@@ -7,7 +7,7 @@ description: End-to-end innovative-drug investment research workflow. Use when C
 
 ## Purpose
 
-Use this skill as the main workflow for innovative-drug investment research. It has two modules:
+Use this skill as the main workflow for innovative-drug investment research. It has three modules:
 
 1. **Source intake**: collect and classify source materials.
 2. **Pipeline structuring**: build the factual base.
@@ -87,10 +87,13 @@ python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
 
 This creates first-pass company, pipeline seed, catalyst seed, and verification queue tables.
 
+The built-in `PIPELINE_SEEDS` in the script are starter examples only. Treat them as first-pass mapping rows and verification leads, not a complete innovative-drug database or final research conclusion.
+
 ## Quality Rules
 
 - Prefer `待确认` over guessing.
 - Keep source names in output rows.
+- Keep source confidence and verification status visible.
 - Do not treat research-deck interpretations as verified clinical facts.
 - Split multi-drug or multi-indication rows when enough detail exists.
 - For stock-move explanations, label unsupported causes as `待核验线索`.

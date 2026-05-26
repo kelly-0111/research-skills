@@ -18,7 +18,9 @@ Treat outputs as research workflow artifacts, not investment advice. Do not stat
 3. Run:
 
 ```bash
-python3 scripts/run_daily_monitor.py
+python3 scripts/run_daily_monitor.py \
+  --watchlist templates/watchlist_template.csv \
+  --output-dir outputs/stock_move_monitor
 ```
 
 4. Review generated files in `outputs/`:
@@ -27,7 +29,7 @@ python3 scripts/run_daily_monitor.py
 - `daily_monitor_YYYY-MM-DD.csv`
 - `cause_check_YYYY-MM-DD.csv`
 
-If network access is blocked or SSL CA verification fails, request permission to access the public market-data endpoint. The bundled script uses an unverified SSL context only for public quote/K-line pulls because some local Python installs lack CA roots.
+If network access is blocked or SSL CA verification fails, request permission to access the public market-data endpoint. The bundled script uses an unverified SSL context only for public quote/K-line/news pulls because some local Python installs lack CA roots. This setting is only for public data retrieval; do not reuse it for login flows, private APIs, paid databases, or requests containing tokens.
 
 The default script does not require `adata` or any third-party market-data SDK. If adding `adata` later, keep it optional and preserve the no-SDK fallback. Read `references/data_providers.md` before changing data providers.
 

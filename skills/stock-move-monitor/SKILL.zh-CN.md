@@ -1,6 +1,6 @@
 ---
 name: stock-move-monitor
-description: 构建并运行 A 股每日股票异动监控投研 workflow。适用于创建或更新自选股池、拉取 A 股实时行情和历史 K 线、检测价格/成交额/资金流/连续涨跌异动、生成 Markdown 每日简报和 CSV 明细表，或把该流程作为可复用投研助手 skill 使用。
+description: 构建并运行 A 股每日股票异动监控投研 workflow。适用于创建或更新自选股池、拉取 A 股实时行情和历史 K 线、检测价格/成交额/资金流/连续涨跌异动、生成 Markdown 每日简报和 CSV 明细表。
 ---
 
 # 股票异动监控 Skill
@@ -18,7 +18,9 @@ description: 构建并运行 A 股每日股票异动监控投研 workflow。适�
 3. 运行：
 
 ```bash
-python3 scripts/run_daily_monitor.py
+python3 scripts/run_daily_monitor.py \
+  --watchlist templates/watchlist_template.csv \
+  --output-dir outputs/stock_move_monitor
 ```
 
 4. 查看 `outputs/` 目录下生成的文件：
@@ -27,7 +29,7 @@ python3 scripts/run_daily_monitor.py
 - `daily_monitor_YYYY-MM-DD.csv`：异动明细表
 - `cause_check_YYYY-MM-DD.csv`：异动原因核验队列
 
-如果网络访问被限制，或 Python 本地证书校验失败，需要允许访问公开行情接口。脚本只在访问公开行情/K 线数据时使用非校验证书上下文，这是为了兼容部分本地 Python 缺少 CA 根证书的环境。
+如果网络访问被限制，或 Python 本地证书校验失败，需要允许访问公开行情接口。脚本只在访问公开行情/K 线/新闻 RSS 数据时使用非校验证书上下文，这是为了兼容部分本地 Python 缺少 CA 根证书的环境。这个设置只用于公开数据拉取，不应用于登录、私有接口、付费数据库或含 token 的请求。
 
 默认脚本不依赖 `adata`，也不依赖其他第三方行情 SDK。以后如果接入 `adata`，也只能作为可选增强，必须保留当前这个无 SDK 备份路径。调整数据源前先看 `references/data_providers.md`。
 

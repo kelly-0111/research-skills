@@ -1,0 +1,10 @@
+analyst_id,analyst_name,broker,sector,report_date,stock_code,stock_name,rating_action,call_direction,thesis_type,event_lag_days,horizon_days,forward_return_pct,benchmark_return_pct,excess_return_pct,forecast_revision_direction,depth_score,evidence_score,originality_score,source_title,source_path_or_url,notes
+A,Analyst A,House A,创新药,2026-01-05,600001,样本药企1,positive_comment,bullish,event,0,20,9,2,,up,3,4,3,事件点评1,/reports/a1.pdf,事件后快速点评
+A,Analyst A,House A,创新药,2026-02-10,600002,样本药企2,target_up,bullish,momentum,1,20,7,1,,up,3,3,3,事件点评2,/reports/a2.pdf,会议催化
+A,Analyst A,House A,创新药,2026-03-15,600003,样本药企3,upgrade,bullish,event,1,20,6,0,,up,2,3,2,事件点评3,/reports/a3.pdf,快速跟踪
+B,Analyst B,House B,半导体,2026-01-08,600101,样本芯片1,initiate,bullish,deep_dive,8,60,15,5,,up,5,5,5,深度报告1,/reports/b1.pdf,产业链深度
+B,Analyst B,House B,半导体,2026-02-12,600102,样本芯片2,maintain,bullish,industry_cycle,10,60,11,4,,up,5,4,5,深度报告2,/reports/b2.pdf,周期判断
+B,Analyst B,House B,半导体,2026-03-18,600103,样本芯片3,maintain,bullish,deep_dive,12,60,8,3,,none,5,5,4,深度报告3,/reports/b3.pdf,模型扎实
+C,Analyst C,House C,消费,2026-01-12,600201,样本消费1,downgrade,bearish,event,1,20,-5,1,,down,3,4,3,风险提示1,/reports/c1.pdf,提示需求转弱
+C,Analyst C,House C,消费,2026-02-18,600202,样本消费2,negative_comment,bearish,event,2,20,-4,0,,down,3,3,3,风险提示2,/reports/c2.pdf,提示库存风险
+C,Analyst C,House C,消费,2026-03-25,600203,样本消费3,downgrade,bearish,event,1,20,-3,1,,down,2,3,2,风险提示3,/reports/c3.pdf,提示盈利下修

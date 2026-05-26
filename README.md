@@ -4,7 +4,7 @@ Author: Kelly S.
 Status: draft / internal testing  
 Created: 2026-05-25
 
-这是一个可分享的投研 skills 包，包含三个可复用 skill；其中 `innovative-drug-research` 内含「管线结构化」和「上涨逻辑复盘」两个子模块：
+这是一个可分享的投研 skills 包，包含三个可复用 skill；其中 `innovative-drug-research` 内含「资料接入」「管线结构化」和「上涨逻辑复盘」三个子模块：
 
 | Skill | 中文名 | 用途 |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ Created: 2026-05-25
 investment_research_skills_share_package/
 ├── README.md
 ├── data/
+├── examples/
 ├── skills/
 │   ├── stock-move-monitor/
 │   ├── innovative-drug-research/
@@ -47,6 +48,13 @@ python3 scripts/run_daily_monitor.py \
 
 基础版不需要安装 `adata` 或其他行情 SDK，默认使用脚本内置的公开行情接口。`adata` 可以作为本机可选增强，但不作为 share package 的必装依赖。
 
+示例：
+
+```text
+examples/stock_move_monitor/sample_watchlist.csv
+examples/stock_move_monitor/sample_daily_report.md
+```
+
 ### 创新药投研助手
 
 准备 Markdown 公司列表或行业资料，运行：
@@ -57,9 +65,10 @@ python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
   --out-dir outputs/innovative_drug_research
 ```
 
-使用 `skills/innovative-drug-research/` 中的两个子模块，既可以整理创新药靶点和进展，也可以分析医药股上涨逻辑：
+使用 `skills/innovative-drug-research/` 中的三个子模块，既可以登记来源，也可以整理创新药靶点和进展，并分析医药股上涨逻辑：
 
 ```text
+资料接入：公告/官网管线页/年报/临床登记/会议摘要/研报
 管线结构化：公司/药物/靶点/阶段/进展/催化剂
 上涨逻辑复盘：事件催化/资金轮动/行情阶段/风险信号
 ```
@@ -89,6 +98,45 @@ templates/analyst_call_log_template.csv
 ```bash
 python3 skills/analyst-profiler/scripts/score_analysts.py \
   --input /path/to/analyst_call_log.csv \
+  --out-dir outputs/analyst_profiler
+```
+
+示例：
+
+```text
+examples/analyst_profiler/sample_analyst_call_log.csv
+examples/analyst_profiler/analyst_scorecard.csv
+examples/analyst_profiler/analyst_profile_report.md
+```
+
+## 依赖
+
+基础 workflow 只使用 Python 标准库。可选增强见：
+
+```text
+requirements.txt
+```
+
+## 测试
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+## 快速测试命令
+
+```bash
+python3 scripts/run_daily_monitor.py \
+  --watchlist templates/watchlist_template.csv \
+  --output-dir outputs/stock_move_monitor \
+  --skip-news-search
+
+python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
+  --company-list templates/company_list_template.md \
+  --out-dir outputs/innovative_drug_research
+
+python3 skills/analyst-profiler/scripts/score_analysts.py \
+  --input examples/analyst_profiler/sample_analyst_call_log.csv \
   --out-dir outputs/analyst_profiler
 ```
 

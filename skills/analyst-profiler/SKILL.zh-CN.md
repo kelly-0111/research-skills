@@ -61,11 +61,19 @@ description: 卖方研究员画像与持续跟踪工作流。适用于结构化�
 
 ## 运行评分脚本
 
+如果输入是标准 `analyst_call_log.csv`，直接运行评分：
+
+```bash
+python3 skills/analyst-profiler/scripts/score_analysts.py \
+  --input /path/to/analyst_call_log.csv \
+  --out-dir outputs/analyst_profiler
+```
+
 如果输入是 Alpha Pai 导出的研究员样本表，先转换字段：
 
 ```bash
 python3 skills/analyst-profiler/scripts/convert_alpha_pai_dataset.py \
-  --input /path/to/analyst_call_log_template.csv \
+  --input /path/to/alpha_pai_export.csv \
   --output outputs/analyst_profiler/analyst_call_log_converted.csv
 ```
 

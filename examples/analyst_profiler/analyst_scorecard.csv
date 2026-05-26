@@ -1,0 +1,4 @@
+﻿analyst_name,broker,sector,call_count,avg_excess_return_pct,avg_directional_return_pct,hit_rate,avg_event_lag_days,avg_depth_score,avg_evidence_score,avg_originality_score,momentum_score,depth_research_score,overall_score,profile_type,confidence,caveat
+Analyst B,House B,半导体,3,7.3333,7.3333,1.0,10.0,5.0,4.6667,4.6667,59.6667,95.4167,79.3292,框架驱动型,低,样本少，仅作初步画像
+Analyst A,House A,创新药,3,6.3333,6.3333,1.0,0.6667,2.6667,3.3333,2.6667,90.3333,46.6667,66.3167,动量快反型,低,样本少，仅作初步画像
+Analyst C,House C,消费,3,-4.6667,4.6667,1.0,1.3333,2.6667,3.3333,2.6667,84.6667,46.6667,63.7667,动量快反型,低,样本少，仅作初步画像

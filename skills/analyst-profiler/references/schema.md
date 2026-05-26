@@ -6,6 +6,7 @@ One row is one sourced analyst call, report, or material update.
 
 | Field | Meaning |
 | --- | --- |
+| analyst_id | Optional stable ID for grouping; use this when names are anonymized, duplicated, or teams change broker text |
 | analyst_name | Analyst name |
 | broker | Broker / research house |
 | sector | Coverage sector |
@@ -37,7 +38,8 @@ One row is one sourced analyst call, report, or material update.
 | sector | Most common sector |
 | call_count | Number of sourced calls |
 | avg_excess_return_pct | Average excess return |
-| hit_rate | Share of calls with positive excess return |
+| avg_directional_return_pct | Return adjusted for call direction; bearish calls benefit from negative excess return |
+| hit_rate | Share of calls that are correct after adjusting for call direction |
 | avg_event_lag_days | Average event lag |
 | avg_depth_score | Average depth score |
 | avg_evidence_score | Average evidence score |

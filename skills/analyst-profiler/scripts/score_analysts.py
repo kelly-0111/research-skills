@@ -18,6 +18,7 @@ FIELDS_OUT = [
     "sector",
     "call_count",
     "avg_excess_return_pct",
+    "avg_directional_return_pct",
     "hit_rate",
     "avg_event_lag_days",
     "avg_depth_score",
@@ -136,29 +137,111 @@ def add_excess_return(row: dict[str, str]) -> float:
     return fwd - bench
 
 
+def normalized_call_text(row: dict[str, str]) -> str:
+    return " ".join(
+        str(row.get(key, "") or "").strip().lower()
+        for key in ["call_direction", "rating_action", "notes"]
+    )
+
+
+def call_polarity(row: dict[str, str]) -> str:
+    text = normalized_call_text(row)
+    bullish_terms = [
+        "buy",
+        "overweight",
+        "outperform",
+        "upgrade",
+        "positive",
+        "bullish",
+        "initiate",
+        "target_up",
+        "看多",
+        "买入",
+        "增持",
+        "推荐",
+        "上调",
+        "正面",
+    ]
+    bearish_terms = [
+        "sell",
+        "underweight",
+        "underperform",
+        "downgrade",
+        "negative",
+        "bearish",
+        "target_down",
+        "看空",
+        "卖出",
+        "减持",
+        "下调",
+        "负面",
+        "风险提示",
+    ]
+    neutral_terms = ["neutral", "hold", "maintain", "中性", "持有", "维持"]
+    if any(term in text for term in bearish_terms):
+        return "bearish"
+    if any(term in text for term in bullish_terms):
+        return "bullish"
+    if any(term in text for term in neutral_terms):
+        return "neutral"
+    return "unknown"
+
+
+def directional_return(row: dict[str, str], excess: float) -> float:
+    if math.isnan(excess):
+        return math.nan
+    polarity = call_polarity(row)
+    if polarity == "bullish":
+        return excess
+    if polarity == "bearish":
+        return -excess
+    if polarity == "neutral":
+        return -abs(excess)
+    return math.nan
+
+
+def calc_hit(row: dict[str, str], excess: float) -> float:
+    if math.isnan(excess):
+        return math.nan
+    polarity = call_polarity(row)
+    if polarity == "bullish":
+        return 1.0 if excess > 0 else 0.0
+    if polarity == "bearish":
+        return 1.0 if excess < 0 else 0.0
+    if polarity == "neutral":
+        return 1.0 if abs(excess) <= 2 else 0.0
+    return math.nan
+
+
 def build_scorecards(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     enriched: list[dict[str, Any]] = []
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for row in rows:
         analyst = row.get("analyst_name", "").strip()
-        if not analyst:
+        analyst_id = row.get("analyst_id", "").strip()
+        group_key = analyst_id or analyst
+        if not group_key:
             continue
         broker = row.get("broker", "").strip() or "待确认"
         item = dict(row)
         item["excess_return_pct_calc"] = add_excess_return(row)
-        item["hit"] = 1 if not math.isnan(item["excess_return_pct_calc"]) and item["excess_return_pct_calc"] > 0 else 0
+        item["directional_return_pct_calc"] = directional_return(row, item["excess_return_pct_calc"])
+        item["hit"] = calc_hit(row, item["excess_return_pct_calc"])
         enriched.append(item)
-        groups[analyst].append(item)
+        groups[group_key].append(item)
 
     scorecards: list[dict[str, Any]] = []
-    for analyst, items in groups.items():
+    for group_key, items in groups.items():
+        analysts = Counter(item.get("analyst_name", group_key) or group_key for item in items)
         brokers = Counter(item.get("broker", "待确认") for item in items)
         sectors = Counter(item.get("sector", "待确认") for item in items)
         call_count = len(items)
         excess_values = [as_float(item.get("excess_return_pct_calc")) for item in items]
         avg_excess = avg(excess_values)
-        hit_values = [item["hit"] for item in items if not math.isnan(as_float(item.get("excess_return_pct_calc")))]
+        directional_values = [as_float(item.get("directional_return_pct_calc")) for item in items]
+        avg_directional = avg(directional_values)
+        hit_values = [as_float(item.get("hit")) for item in items if not math.isnan(as_float(item.get("hit")))]
         hit_rate = sum(hit_values) / len(hit_values) if hit_values else math.nan
         avg_lag = avg([as_float(item.get("event_lag_days")) for item in items])
         avg_depth = avg([as_float(item.get("depth_score")) for item in items])
@@ -167,7 +250,7 @@ def build_scorecards(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], 
 
         momentum = (
             score_timeliness(avg_lag) * 0.35
-            + score_excess(avg_excess) * 0.4
+            + score_excess(avg_directional) * 0.4
             + score_hit_rate(hit_rate) * 0.25
         )
         depth_research = (
@@ -181,11 +264,12 @@ def build_scorecards(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], 
 
         scorecards.append(
             {
-                "analyst_name": analyst,
+                "analyst_name": analysts.most_common(1)[0][0],
                 "broker": brokers.most_common(1)[0][0],
                 "sector": sectors.most_common(1)[0][0],
                 "call_count": call_count,
                 "avg_excess_return_pct": avg_excess,
+                "avg_directional_return_pct": avg_directional,
                 "hit_rate": hit_rate,
                 "avg_event_lag_days": avg_lag,
                 "avg_depth_score": avg_depth,

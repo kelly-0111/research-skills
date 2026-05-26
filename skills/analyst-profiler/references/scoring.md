@@ -5,7 +5,7 @@
 | Dimension | What it measures |
 | --- | --- |
 | Forward performance | Whether calls outperform sector/benchmark after publication |
-| Hit rate | Consistency of positive excess return |
+| Hit rate | Direction-aware correctness: bullish calls should outperform, bearish calls should underperform, neutral calls should stay near benchmark |
 | Timeliness | Whether the analyst reacts before or soon after catalysts |
 | Depth | Modeling quality, company detail, industry-chain work, and falsifiable assumptions |
 | Evidence | Whether the report cites verifiable data, filings, field research, or channel checks |
@@ -28,3 +28,5 @@ Use sample-aware labels:
 - Do not infer personal capability from one report.
 - Keep manual scores auditable; source files must be available.
 - Market returns are noisy. Treat scores as workflow signals, not final truth.
+- Score bearish and risk-warning calls directionally; a stock underperforming after a bearish call is a hit.
+- Missing `event_lag_days` is allowed; the scorer assigns a neutral-low timeliness score of 40 rather than failing the run.
