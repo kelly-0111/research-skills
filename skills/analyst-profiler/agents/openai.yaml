@@ -1,0 +1,3 @@
+display_name: 卖方研究员画像
+short_description: 结构化卖方研报观点，生成研究员画像和持续跟踪评分卡。
+default_prompt: 用这个 skill 建立卖方研究员画像，区分快反型、深度型和跟随型，并输出评分卡。

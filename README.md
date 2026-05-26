@@ -4,12 +4,13 @@ Author: Kelly S.
 Status: draft / internal testing  
 Created: 2026-05-25
 
-这是一个可分享的投研 skills 包，包含两个可复用 skill；其中 `innovative-drug-research` 内含「管线结构化」和「上涨逻辑复盘」两个子模块：
+这是一个可分享的投研 skills 包，包含三个可复用 skill；其中 `innovative-drug-research` 内含「管线结构化」和「上涨逻辑复盘」两个子模块：
 
 | Skill | 中文名 | 用途 |
 | --- | --- | --- |
 | `stock-move-monitor` | 股票异动监控 | 根据自选股列表生成每日异动监控 CSV 和 Markdown 日报 |
 | `innovative-drug-research` | 创新药投研助手 | 结构化创新药管线，并复盘医药股上涨逻辑、资金轮动、事件催化和风险信号 |
+| `analyst-profiler` | 卖方研究员画像 | 结构化卖方研报观点，区分快反型、深度型和持续跟踪价值 |
 
 ## 目录
 
@@ -19,7 +20,8 @@ investment_research_skills_share_package/
 ├── data/
 ├── skills/
 │   ├── stock-move-monitor/
-│   └── innovative-drug-research/
+│   ├── innovative-drug-research/
+│   └── analyst-profiler/
 ├── scripts/
 ├── templates/
 └── examples/
@@ -72,6 +74,22 @@ data/innovative_drug_sources/
 
 ```text
 templates/innovative_drug_source_manifest_template.csv
+```
+
+### 卖方研究员画像
+
+准备研究员观点记录模板：
+
+```text
+templates/analyst_call_log_template.csv
+```
+
+运行：
+
+```bash
+python3 skills/analyst-profiler/scripts/score_analysts.py \
+  --input /path/to/analyst_call_log.csv \
+  --out-dir outputs/analyst_profiler
 ```
 
 ## 分享注意
