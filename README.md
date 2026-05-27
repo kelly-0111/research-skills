@@ -19,6 +19,8 @@ investment_research_skills_share_package/
 ├── README.md
 ├── data/
 ├── examples/
+├── apps/
+│   └── research_assistant_app/
 ├── skills/
 │   ├── stock-move-monitor/
 │   ├── innovative-drug-research/
@@ -29,6 +31,29 @@ investment_research_skills_share_package/
 ```
 
 ## 使用方式
+
+### 给非技术同事使用：本地网页工具
+
+如果同事不熟悉 GitHub、命令行或 IDE，优先使用本地网页工具：
+
+```bash
+cd apps/research_assistant_app
+bash 启动.sh
+```
+
+Windows 可双击：
+
+```text
+apps/research_assistant_app/启动.bat
+```
+
+浏览器地址：
+
+```text
+http://127.0.0.1:5199
+```
+
+网页工具支持上传 Excel/CSV/Markdown，运行后会同时在网页展示结果，并生成可下载文件。
 
 ### 股票异动监控
 

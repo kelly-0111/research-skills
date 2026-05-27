@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import ssl
 import sys
 import time
@@ -31,6 +32,18 @@ from urllib.request import Request, urlopen
 QUOTE_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
 KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 BING_NEWS_RSS_URL = "https://www.bing.com/news/search"
+KLINE_CACHE_ROOT = Path(os.environ.get("STOCK_MONITOR_CACHE_DIR", Path.cwd() / ".cache" / "stock_move_monitor"))
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Referer": "https://quote.eastmoney.com/",
+    "Connection": "close",
+}
 
 CAUSE_SOURCE_PRIORITY = [
     "公司公告/交易所公告",
@@ -59,7 +72,20 @@ class Stock:
 
     @property
     def secid(self) -> str:
-        return f"{self.market}.{self.code}"
+        market = (self.market or "").strip().upper()
+        if market in {"HK", "HKG", "港股"}:
+            return f"116.{self.code.zfill(5)}"
+        if market in {"SH", "SSE", "上海", "沪市"}:
+            return f"1.{self.code}"
+        if market in {"SZ", "SZSE", "深圳", "深市"}:
+            return f"0.{self.code}"
+        if market in {"BJ", "BSE", "北京", "北交所"}:
+            return f"0.{self.code}"
+        if market in {"1", "0", "116"}:
+            return f"{market}.{self.code}"
+        if self.code.startswith(("5", "6", "9")):
+            return f"1.{self.code}"
+        return f"0.{self.code}"
 
 
 def fetch_json(
@@ -73,10 +99,7 @@ def fetch_json(
     full_url = f"{url}?{urlencode(params)}"
     req = Request(
         full_url,
-        headers={
-            "User-Agent": "Mozilla/5.0 research-workflow/0.1",
-            "Referer": "https://quote.eastmoney.com/",
-        },
+        headers=BROWSER_HEADERS,
     )
     # The local Python install may lack system CA roots. Limit this to public market-data pulls.
     context = ssl._create_unverified_context()
@@ -120,6 +143,8 @@ def load_watchlist(path: Path) -> list[Stock]:
         rows = list(csv.DictReader(f))
     stocks: list[Stock] = []
     for row in rows:
+        pct_threshold = as_threshold(row.get("pct_threshold"), 5.0)
+        amount_ratio_threshold = as_threshold(row.get("amount_ratio_threshold"), 2.0)
         stocks.append(
             Stock(
                 code=row["code"],
@@ -130,11 +155,20 @@ def load_watchlist(path: Path) -> list[Stock]:
                 watch_reason=row["watch_reason"],
                 tracking_points=row["tracking_points"],
                 keywords=row["keywords"],
-                pct_threshold=float(row["pct_threshold"]),
-                amount_ratio_threshold=float(row["amount_ratio_threshold"]),
+                pct_threshold=pct_threshold,
+                amount_ratio_threshold=amount_ratio_threshold,
             )
         )
     return stocks
+
+
+def as_threshold(value: Any, default: float) -> float:
+    try:
+        if value in ("-", None, ""):
+            return default
+        return float(str(value).replace("%", "").strip())
+    except Exception:
+        return default
 
 
 def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
@@ -144,7 +178,7 @@ def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
         params = {
             "fltt": 2,
             "invt": 2,
-            "fields": "f12,f14,f2,f3,f4,f5,f6,f20,f21,f62,f184",
+            "fields": "f12,f14,f2,f3,f4,f5,f6,f10,f20,f21,f62,f184",
             "secids": ",".join(stock.secid for stock in batch),
         }
         try:
@@ -159,16 +193,32 @@ def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
 
 
 def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
-    params = {
-        "secid": stock.secid,
-        "fields1": "f1,f2,f3,f4,f5,f6",
-        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-        "klt": 101,
-        "fqt": 1,
-        "beg": "20240101",
-        "end": "20500101",
-    }
-    data = fetch_json(KLINE_URL, params, attempts=5, timeout=25, base_sleep=2.0)
+    cached = load_kline_cache(stock)
+    if cached:
+        return cached
+
+    data: dict[str, Any] = {}
+    last_error: RuntimeError | None = None
+    for fqt in (1, 0):
+        params = {
+            "secid": stock.secid,
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+            "klt": 101,
+            "fqt": fqt,
+            "beg": "20240101",
+            "end": "20500101",
+        }
+        try:
+            data = fetch_json(KLINE_URL, params, attempts=3, timeout=18, base_sleep=1.5)
+        except RuntimeError as exc:
+            last_error = exc
+            continue
+        if ((data.get("data") or {}).get("klines")):
+            break
+    else:
+        if last_error:
+            raise last_error
     raw = ((data.get("data") or {}).get("klines")) or []
     out: list[dict[str, Any]] = []
     for line in raw:
@@ -190,7 +240,42 @@ def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
                 "turnover": as_float(fields[10]),
             }
         )
+    if out:
+        save_kline_cache(stock, out)
     return out
+
+
+def kline_cache_path(stock: Stock, cache_date: str | None = None) -> Path:
+    day = cache_date or datetime.now().strftime("%Y-%m-%d")
+    safe_secid = stock.secid.replace(".", "_")
+    return KLINE_CACHE_ROOT / "kline" / day / f"{safe_secid}.json"
+
+
+def load_kline_cache(stock: Stock) -> list[dict[str, Any]]:
+    path = kline_cache_path(stock)
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        rows = data.get("rows") or []
+        if rows:
+            return rows
+    except Exception:
+        return []
+    return []
+
+
+def save_kline_cache(stock: Stock, rows: list[dict[str, Any]]) -> None:
+    path = kline_cache_path(stock)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "secid": stock.secid,
+        "code": stock.code,
+        "name": stock.name,
+        "cached_at": datetime.now().isoformat(timespec="seconds"),
+        "rows": rows,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def as_float(value: Any) -> float:
@@ -263,11 +348,13 @@ def classify(row: dict[str, Any], stock: Stock) -> tuple[list[str], str, str, st
         confidence = "低"
 
     if "价格异动" in flags or "放量异动" in flags:
-        reason = f"优先核验：{stock.keywords}；结合公告、新闻、研报和行业价格数据判断是否基本面驱动。"
+        reason = f"已触发价格/量能异动，进入自动新闻与公告线索核验；重点关键词：{stock.keywords}。"
     elif "资金异动" in flags:
-        reason = "主力资金指标波动较大，先核验是否有公告、政策或行业事件。"
+        reason = "已触发资金异动，进入自动新闻与公告线索核验；需判断是否有公告、政策、行业事件或资金轮动。"
+    elif "连续上涨" in flags or "连续下跌" in flags:
+        reason = "已触发连续涨跌信号，进入自动新闻与公告线索核验；需区分趋势延续、基本面变化和交易性波动。"
     else:
-        reason = "未触发核心阈值，保留在日常观察池。"
+        reason = "未触发异动阈值，不自动检索新闻；保留在日常观察池。"
 
     next_action = f"跟踪：{stock.tracking_points}"
     return flags, confidence, reason, next_action
@@ -466,7 +553,23 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         amount = as_float(quote.get("f6"))
         if math.isnan(amount) and klines:
             amount = klines[-1]["amount"]
-        amount_ratio = amount / ma20_amount if ma20_amount and not math.isnan(ma20_amount) else math.nan
+        quote_amount_ratio = as_float(quote.get("f10"))
+        amount_ratio = amount / ma20_amount if ma20_amount and not math.isnan(ma20_amount) else quote_amount_ratio
+        if math.isnan(amount_ratio):
+            amount_ratio_source = ""
+        elif ma20_amount and not math.isnan(ma20_amount):
+            amount_ratio_source = "K线计算"
+        else:
+            amount_ratio_source = "实时行情"
+
+        if kline_status == "ok":
+            data_quality = "完整"
+        elif not math.isnan(amount_ratio):
+            data_quality = "K线缺失：使用实时量比；连续涨跌不可用"
+        elif quote:
+            data_quality = "K线缺失：涨跌幅可用；量比/连续涨跌不可用"
+        else:
+            data_quality = "行情与K线均缺失"
 
         row = {
             "code": stock.code,
@@ -480,12 +583,13 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
             "amount_yi": money_yi(amount),
             "ma20_amount_yi": money_yi(ma20_amount),
             "amount_ratio": amount_ratio,
+            "amount_ratio_source": amount_ratio_source,
             "main_net_yi": money_yi(as_float(quote.get("f62"))),
             "main_net_pct": as_float(quote.get("f184")),
             "streak": calculate_streak(klines),
             "latest_kline_date": latest_kline_date,
             "kline_status": kline_status,
-            "data_quality": "完整" if kline_status == "ok" else "K线缺失：量比/连续涨跌不可用",
+            "data_quality": data_quality,
             "kline_error": kline_error,
             "keywords": stock.keywords,
         }
@@ -496,7 +600,7 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         row["next_action"] = next_action
         row["is_abnormal"] = "是" if flags != ["常规跟踪"] else "否"
         rows.append(row)
-        time.sleep(0.15)
+        time.sleep(0.9)
         print(f"[{i:02d}/{len(stocks)}] {stock.code} {stock.name} done", file=sys.stderr)
     rows.sort(
         key=lambda r: (
@@ -520,6 +624,7 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
         "amount_yi",
         "ma20_amount_yi",
         "amount_ratio",
+        "amount_ratio_source",
         "main_net_yi",
         "main_net_pct",
         "streak",
@@ -623,6 +728,123 @@ def cause_markdown_table(cause_checks: list[dict[str, Any]], limit: int = 12) ->
     return header + sep + "\n".join(body)
 
 
+def count_by(rows: list[dict[str, Any]], key: str) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key) or "未分类")
+        counts[value] = counts.get(value, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def avg(values: list[float]) -> float:
+    clean = [value for value in values if not math.isnan(value)]
+    return sum(clean) / len(clean) if clean else math.nan
+
+
+def signed(value: float, suffix: str = "") -> str:
+    if math.isnan(value):
+        return ""
+    prefix = "+" if value > 0 else ""
+    return f"{prefix}{value:.2f}{suffix}"
+
+
+def theme_summary_table(rows: list[dict[str, Any]]) -> str:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(row.get("theme") or row.get("industry") or "未分类", []).append(row)
+    header = "| 主题 | 覆盖股票 | 平均涨跌幅 | 上涨/下跌 | 异动数 | 资金净流入合计(亿) |\n"
+    sep = "|---|---:|---:|---:|---:|---:|\n"
+    body = []
+    for theme, items in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0])):
+        pct_avg = avg([item["pct_chg"] for item in items])
+        up = sum(1 for item in items if not math.isnan(item["pct_chg"]) and item["pct_chg"] > 0)
+        down = sum(1 for item in items if not math.isnan(item["pct_chg"]) and item["pct_chg"] < 0)
+        abnormal_count = sum(1 for item in items if item["is_abnormal"] == "是")
+        main_sum = sum(item["main_net_pct"] for item in items if not math.isnan(item["main_net_pct"]))
+        body.append(
+            f"| {md_cell(theme)} | {len(items)} | {signed(pct_avg, '%')} | {up}/{down} | {abnormal_count} | {signed(main_sum)} |"
+        )
+    return header + sep + "\n".join(body)
+
+
+def ranking_table(rows: list[dict[str, Any]], *, reverse: bool, limit: int = 8) -> str:
+    filtered = [row for row in rows if not math.isnan(row["pct_chg"])]
+    filtered.sort(key=lambda row: row["pct_chg"], reverse=reverse)
+    header = "| 排名 | 股票 | 主题 | 涨跌幅 | 成交额(亿) | 量比 | 主力净流入(亿) | 备注 |\n"
+    sep = "|---:|---|---|---:|---:|---:|---:|---|\n"
+    body = []
+    for idx, row in enumerate(filtered[:limit], 1):
+        amount_ratio = "" if math.isnan(row["amount_ratio"]) else f"{row['amount_ratio']:.2f}x"
+        note = row["abnormal_type"] if row["is_abnormal"] == "是" else "未触发阈值"
+        body.append(
+            f"| {idx} | {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['theme'])} | {pct(row['pct_chg'])} | {md_cell(row['amount_yi'])} | {amount_ratio} | {md_cell(row['main_net_yi'])} | {md_cell(note)} |"
+        )
+    return header + sep + "\n".join(body)
+
+
+def watch_queue_table(rows: list[dict[str, Any]], limit: int = 12) -> str:
+    def score(row: dict[str, Any]) -> tuple[int, float]:
+        points = 0
+        if row["is_abnormal"] == "是":
+            points += 4
+        if not math.isnan(row["pct_chg"]) and abs(row["pct_chg"]) >= 2:
+            points += 2
+        if not math.isnan(row["amount_ratio"]) and row["amount_ratio"] >= 1:
+            points += 1
+        if not math.isnan(row["main_net_pct"]) and abs(row["main_net_pct"]) >= 5:
+            points += 1
+        return points, abs(row["pct_chg"]) if not math.isnan(row["pct_chg"]) else 0
+
+    ranked = sorted(rows, key=score, reverse=True)
+    header = "| 优先级 | 股票 | 今日变化 | 关注理由 | 下一步动作 |\n"
+    sep = "|---|---|---|---|---|\n"
+    body = []
+    for row in ranked[:limit]:
+        points, _ = score(row)
+        priority = "高" if points >= 5 else "中" if points >= 3 else "低"
+        change = f"{pct(row['pct_chg'])}，量比 " + ("" if math.isnan(row["amount_ratio"]) else f"{row['amount_ratio']:.2f}x")
+        body.append(
+            f"| {priority} | {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(change)} | {md_cell(row['reason_hint'])} | {md_cell(row['next_action'])} |"
+        )
+    return header + sep + "\n".join(body)
+
+
+def cause_summary_for_row(row: dict[str, Any], cause_by_code: dict[str, dict[str, Any]]) -> str:
+    cause = cause_by_code.get(row["code"])
+    if cause:
+        summary = cause.get("evidence_summary") or cause.get("notes") or ""
+        if len(summary) > 100:
+            summary = summary[:100] + "..."
+        return f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}：{summary}".strip("：")
+    if row.get("is_abnormal") == "是":
+        return "已触发异动，但本次自动检索未返回有效新闻线索；需人工核验公告和新闻。"
+    return "未触发异动阈值，未自动检索新闻。"
+
+
+def detailed_stock_block(row: dict[str, Any], cause_by_code: dict[str, dict[str, Any]]) -> list[str]:
+    amount_ratio_text = "数据缺失" if math.isnan(row["amount_ratio"]) else f"{row['amount_ratio']:.2f} 倍"
+    price_signal = "上涨" if not math.isnan(row["pct_chg"]) and row["pct_chg"] > 0 else "下跌" if not math.isnan(row["pct_chg"]) and row["pct_chg"] < 0 else "持平/缺失"
+    volume_signal = "放量" if not math.isnan(row["amount_ratio"]) and row["amount_ratio"] >= 1.2 else "缩量/未放量" if not math.isnan(row["amount_ratio"]) else "量能缺失"
+    cause = cause_by_code.get(row["code"])
+    evidence = "未进入自动原因核验；如人工关注，可先查公告、新闻和研报更新。"
+    judgement = "未检索"
+    if cause:
+        evidence = cause.get("evidence_summary") or cause.get("notes") or evidence
+        judgement = f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}".strip("/")
+    return [
+        f"### {row['code']} {row['name']}",
+        "",
+        f"- 交易表现：{price_signal}，涨跌幅 {pct(row['pct_chg'])}，成交额 {row['amount_yi']} 亿，量比 {amount_ratio_text}（{row.get('amount_ratio_source') or '无'}）。",
+        f"- 异动判断：{row['abnormal_type']}；系统置信度：{row['confidence']}；数据质量：{row.get('data_quality', '')}。",
+        f"- 异动线索：{row['reason_hint']}",
+        f"- 量价结构：{volume_signal}；主力净流入 {row.get('main_net_yi', '')} 亿，主力净占比 {signed(row['main_net_pct'], '%')}。",
+        f"- 原因核验：{judgement}。{evidence}",
+        f"- 明日跟踪：{row['next_action']}",
+        f"- 关键词：{row['keywords']}",
+        "",
+    ]
+
+
 def write_report(
     rows: list[dict[str, Any]],
     cause_checks: list[dict[str, Any]],
@@ -630,42 +852,71 @@ def write_report(
     generated_at: str,
 ) -> None:
     abnormal = [r for r in rows if r["is_abnormal"] == "是"]
-    top = abnormal[:8] if abnormal else rows[:5]
+    top = sorted(rows, key=lambda r: (r["is_abnormal"] != "是", -(abs(r["pct_chg"]) if not math.isnan(r["pct_chg"]) else 0)))[:10]
     incomplete = [r for r in rows if r.get("kline_status") != "ok"]
+    quote_ok = [r for r in rows if not math.isnan(r["pct_chg"]) or not math.isnan(r["price"])]
+    kline_ok = [r for r in rows if r.get("kline_status") == "ok"]
+    amount_ratio_ok = [r for r in rows if not math.isnan(r["amount_ratio"])]
+    up_count = sum(1 for r in rows if not math.isnan(r["pct_chg"]) and r["pct_chg"] > 0)
+    down_count = sum(1 for r in rows if not math.isnan(r["pct_chg"]) and r["pct_chg"] < 0)
+    cause_by_code = {row["code"]: row for row in cause_checks}
+    theme_counts = "；".join(f"{name} {count}" for name, count in count_by(rows, "theme")[:6])
     lines = [
         "# 每日异动监控简报",
         "",
         f"- 生成时间：{generated_at}",
         f"- 股票池数量：{len(rows)}",
         f"- 触发异动数量：{len(abnormal)}",
-        f"- K线数据不完整数量：{len(incomplete)}",
+        f"- 行情成功数量：{len(quote_ok)}/{len(rows)}",
+        f"- 量比可用数量：{len(amount_ratio_ok)}/{len(rows)}",
+        f"- K线成功数量：{len(kline_ok)}/{len(rows)}（仅影响连续涨跌和20日均额；若实时量比可用，不影响基础异动扫描）",
+        f"- 上涨/下跌数量：{up_count}/{down_count}",
+        f"- 主要主题分布：{theme_counts}",
         "- 数据源：东方财富公开行情/K线接口",
         "- 说明：本报告用于投研 workflow 测试，不构成投资建议；无来源支持的原因分析均为待核验线索。",
         "",
-        "## 一、今日重点异动",
+        "## 一、盘面概览",
+        "",
+        theme_summary_table(rows),
+        "",
+        "## 二、今日重点异动",
         "",
         markdown_table(abnormal if abnormal else rows),
         "",
-        "## 二、个股异动分析",
+        "## 三、涨跌幅排序",
         "",
+        "### 涨幅靠前",
+        "",
+        ranking_table(rows, reverse=True),
+        "",
+        "### 跌幅靠前",
+        "",
+        ranking_table(rows, reverse=False),
+        "",
+        "## 四、重点跟踪队列",
+        "",
+        watch_queue_table(rows),
+        "",
+        "## 五、自动新闻原因分析",
+        "",
+        "| 股票 | 是否异动 | 异动类型 | 自动检索结论 | 下一步 |\n|---|---|---|---|---|",
     ]
     for row in top:
-        amount_ratio_text = "数据缺失" if math.isnan(row["amount_ratio"]) else f"{row['amount_ratio']:.2f} 倍"
-        lines.extend(
-            [
-                f"### {row['code']} {row['name']}",
-                "",
-                f"- 今日表现：涨跌幅 {pct(row['pct_chg'])}，成交额 {row['amount_yi']} 亿，约为近20日均额 {amount_ratio_text}。",
-                f"- 异动类型：{row['abnormal_type']}，置信度：{row['confidence']}。",
-                f"- 初步原因线索：{row['reason_hint']}",
-                f"- 后续跟踪事项：{row['next_action']}",
-                f"- 关键词：{row['keywords']}",
-                "",
-            ]
+        lines.append(
+            f"| {md_cell(row['code'])} {md_cell(row['name'])} | {row['is_abnormal']} | {md_cell(row['abnormal_type'])} | {md_cell(cause_summary_for_row(row, cause_by_code))} | {md_cell(row['next_action'])} |"
         )
     lines.extend(
         [
-            "## 三、异动原因核验",
+        "",
+        "## 六、个股复盘",
+        "",
+        ]
+    )
+    for row in top:
+        lines.extend(detailed_stock_block(row, cause_by_code))
+    lines.extend(
+        [
+            "## 七、异动原因核验",
             "",
             cause_markdown_table(cause_checks),
             "",
@@ -673,28 +924,31 @@ def write_report(
             "",
             "脚本会自动检索新闻 RSS，并把搜索词、匹配新闻、来源标题/链接和判断写入 `cause_check_YYYY-MM-DD.csv`。即使检索到新闻，也只能先标为线索，需继续核验公告原文和正文。",
             "",
-            "## 四、明日重点关注",
+            "## 八、明日重点关注",
             "",
-            "1. 优先核验高置信度异动个股是否有公告、政策、行业价格或研报催化。",
-            "2. 对连续上涨/下跌个股检查是否存在基本面变化或纯交易性波动。",
-            "3. 对放量但涨跌幅不大的个股，关注是否处于事件前置交易或资金换手阶段。",
+            "1. 对高优先级股票补公告原文、交易所披露和公司新闻，区分确认原因和待核验线索。",
+            "2. 对涨跌幅靠前但未触发异动阈值的股票，检查是否需要调整阈值或加入人工关注。",
+            "3. 对资金异动个股，继续看次日成交额、主力净流入是否延续，避免单日噪声。",
+            "4. 对创新药标的，单独补临床数据、BD/license-out、医保、ASCO/ESMO/AACR/WCLC 会议线索。",
+            "5. 如果 K线成功率低，优先用备用行情源或本地历史行情缓存补齐量比和连续涨跌。",
             "",
         ]
     )
     if incomplete:
         lines.extend(
             [
-                "## 五、数据质量提示",
+                "## 九、数据质量提示",
                 "",
-                "以下股票本次 K 线接口请求失败，实时报价仍可用，但量比/连续涨跌/最新K线日期字段不完整：",
+                "以下股票本次 K 线接口请求失败；若有实时量比则已用于兜底，但连续涨跌和20日均额仍不完整：",
                 "",
-                "| 股票 | 行业 | 今日涨跌幅 | 说明 |",
-                "|---|---|---:|---|",
+                "| 股票 | 行业 | 今日涨跌幅 | 量比 | 量比来源 | 说明 |",
+                "|---|---|---:|---:|---|---|",
             ]
         )
         for row in incomplete:
+            amount_ratio = "" if math.isnan(row["amount_ratio"]) else f"{row['amount_ratio']:.2f}x"
             lines.append(
-                f"| {row['code']} {row['name']} | {row['industry']} | {pct(row['pct_chg'])} | {row.get('data_quality', '')} |"
+                f"| {row['code']} {row['name']} | {row['industry']} | {pct(row['pct_chg'])} | {amount_ratio} | {row.get('amount_ratio_source', '')} | {row.get('data_quality', '')} |"
             )
         lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")

@@ -2,4 +2,9 @@ __pycache__/
 *.pyc
 .DS_Store
 outputs/
-
+uploads/
+.cache/
+apps/research_assistant_app/outputs/
+apps/research_assistant_app/uploads/
+apps/research_assistant_app/.cache/
+apps/research_assistant_app/archived_runs/

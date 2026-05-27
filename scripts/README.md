@@ -6,7 +6,7 @@ Skill-specific reusable scripts live under each skill folder:
 
 ```text
 skills/stock-move-monitor/scripts/
-skills/drug-pipeline-structuring/scripts/
+skills/innovative-drug-research/scripts/
 ```
 
 Current project entrypoint:
@@ -16,4 +16,3 @@ python3 scripts/run_daily_monitor.py
 ```
 
 It delegates to `skills/stock-move-monitor/scripts/run_daily_monitor.py` and writes outputs to `outputs/stock_move_monitor/`.
-
