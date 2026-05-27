@@ -41,6 +41,12 @@ cd apps/research_assistant_app
 bash 启动.sh
 ```
 
+Mac 可双击：
+
+```text
+apps/research_assistant_app/启动.command
+```
+
 Windows 可双击：
 
 ```text
