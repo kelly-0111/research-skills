@@ -55,6 +55,20 @@ CAUSE_SOURCE_PRIORITY = [
 PHARMA_KEYWORDS = ["医药", "创新药", "临床", "BD", "获批", "NDA", "BLA", "ASCO", "ESMO", "AACR"]
 CAUSE_POSITIVE_TERMS = ["公告", "中标", "订单", "合同", "业绩", "预增", "回购", "增持", "获批", "临床", "BD", "合作", "政策", "涨停", "上涨"]
 CAUSE_NEGATIVE_TERMS = ["减持", "亏损", "下滑", "处罚", "问询", "终止", "下跌", "利空", "风险", "解禁"]
+CAUSE_SIGNAL_TERMS = CAUSE_POSITIVE_TERMS + CAUSE_NEGATIVE_TERMS + [
+    "创新药",
+    "临床",
+    "获批",
+    "BD",
+    "合作",
+    "授权",
+    "减持",
+    "问询函",
+    "监管",
+    "盈利",
+    "营收",
+    "销售",
+]
 
 
 @dataclass
@@ -108,7 +122,16 @@ def fetch_json(
         try:
             with urlopen(req, timeout=timeout, context=context) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, socket.timeout, RemoteDisconnected) as exc:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            socket.timeout,
+            RemoteDisconnected,
+            BrokenPipeError,
+            ConnectionResetError,
+            OSError,
+        ) as exc:
             last_error = exc
             if attempt == attempts - 1:
                 break
@@ -130,7 +153,16 @@ def fetch_text(url: str, *, attempts: int = 2, timeout: int = 10, base_sleep: fl
         try:
             with urlopen(req, timeout=timeout, context=context) as resp:
                 return resp.read().decode("utf-8", errors="replace")
-        except (HTTPError, URLError, TimeoutError, socket.timeout, RemoteDisconnected) as exc:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            socket.timeout,
+            RemoteDisconnected,
+            BrokenPipeError,
+            ConnectionResetError,
+            OSError,
+        ) as exc:
             last_error = exc
             if attempt == attempts - 1:
                 break
@@ -468,17 +500,49 @@ def judge_news_cause(stock: Stock, row: dict[str, Any], news_items: list[dict[st
     if not news_items:
         return "未发现明确来源", "无明显新闻", "低", "", "新闻 RSS 未返回与股票名称/代码直接匹配的结果。"
 
-    titles = "；".join(item["title"] for item in news_items if item.get("title"))
-    title_blob = titles.lower()
+    title_blob = " ".join(item.get("title", "") for item in news_items).lower()
     matched_terms = [term for term in CAUSE_POSITIVE_TERMS + CAUSE_NEGATIVE_TERMS if term.lower() in title_blob]
-    evidence_summary = "；".join(
-        f"{item.get('source') or '新闻源'}:{item.get('title')}" for item in news_items[:3]
-    )
+    evidence_summary = summarize_news_items(news_items)
     if matched_terms:
         note = f"新闻标题匹配关键词：{';'.join(dict.fromkeys(matched_terms))}。仍需核对正文和公告原文。"
         return "已检索", "高相关线索", "中", evidence_summary, note
     note = "检索到相关新闻，但标题未直接指向公告、业绩、订单、政策、临床/BD等明确催化。"
     return "已检索", "待核验线索", "低", evidence_summary, note
+
+
+def summarize_news_items(news_items: list[dict[str, str]], limit: int = 3) -> str:
+    summaries = []
+    for item in news_items[:limit]:
+        title = item.get("title", "")
+        source = item.get("source") or "新闻源"
+        matched = [term for term in CAUSE_SIGNAL_TERMS if term.lower() in title.lower()]
+        if matched:
+            point = "关键词：" + "/".join(dict.fromkeys(matched[:4]))
+        else:
+            point = "相关新闻，需核验正文"
+        summaries.append(f"{source}：{point}")
+    return "；".join(summaries)
+
+
+def first_link_markdown(cause: dict[str, Any]) -> str:
+    urls = [url for url in str(cause.get("source_url_or_path", "")).split("；") if url.strip()]
+    if not urls:
+        return ""
+    return f"[来源链接]({urls[0]})"
+
+
+def compact_cause_summary(cause: dict[str, Any], max_len: int = 90) -> str:
+    summary = cause.get("evidence_summary") or cause.get("notes") or ""
+    summary = re_space(str(summary))
+    if len(summary) > max_len:
+        summary = summary[:max_len] + "..."
+    link = first_link_markdown(cause)
+    parts = [
+        f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}".strip("/"),
+        summary,
+        link,
+    ]
+    return "：".join(part for part in parts if part)
 
 
 def build_cause_checks(
@@ -715,15 +779,16 @@ def markdown_table(rows: list[dict[str, Any]], limit: int = 20) -> str:
 def cause_markdown_table(cause_checks: list[dict[str, Any]], limit: int = 12) -> str:
     if not cause_checks:
         return "今日无异动股票需要原因核验。"
-    header = "| 股票 | 异动类型 | 原因分类 | 新闻匹配 | 证据状态 | 判断 | 证据摘要 |\n"
+    header = "| 股票 | 异动类型 | 原因分类 | 新闻匹配 | 判断 | 摘要 | 链接 |\n"
     sep = "|---|---|---|---:|---|---|---|\n"
     body = []
     for row in cause_checks[:limit]:
         summary = row.get("evidence_summary") or row.get("notes", "")
         if len(summary) > 80:
             summary = summary[:80] + "..."
+        link = first_link_markdown(row)
         body.append(
-            f"| {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['abnormal_type'])} | {md_cell(row['cause_categories'])} | {md_cell(row.get('matched_news_count', ''))} | {md_cell(row['evidence_status'])} | {md_cell(row['cause_judgement'])} | {md_cell(summary)} |"
+            f"| {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['abnormal_type'])} | {md_cell(row['cause_categories'])} | {md_cell(row.get('matched_news_count', ''))} | {md_cell(row['evidence_status'] + '/' + row['cause_judgement'])} | {md_cell(summary)} | {link} |"
         )
     return header + sep + "\n".join(body)
 
@@ -812,10 +877,7 @@ def watch_queue_table(rows: list[dict[str, Any]], limit: int = 12) -> str:
 def cause_summary_for_row(row: dict[str, Any], cause_by_code: dict[str, dict[str, Any]]) -> str:
     cause = cause_by_code.get(row["code"])
     if cause:
-        summary = cause.get("evidence_summary") or cause.get("notes") or ""
-        if len(summary) > 100:
-            summary = summary[:100] + "..."
-        return f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}：{summary}".strip("：")
+        return compact_cause_summary(cause, max_len=100)
     if row.get("is_abnormal") == "是":
         return "已触发异动，但本次自动检索未返回有效新闻线索；需人工核验公告和新闻。"
     return "未触发异动阈值，未自动检索新闻。"
@@ -829,7 +891,7 @@ def detailed_stock_block(row: dict[str, Any], cause_by_code: dict[str, dict[str,
     evidence = "未进入自动原因核验；如人工关注，可先查公告、新闻和研报更新。"
     judgement = "未检索"
     if cause:
-        evidence = cause.get("evidence_summary") or cause.get("notes") or evidence
+        evidence = compact_cause_summary(cause, max_len=160)
         judgement = f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}".strip("/")
     return [
         f"### {row['code']} {row['name']}",

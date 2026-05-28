@@ -61,6 +61,12 @@ http://127.0.0.1:5199
 
 网页工具支持上传 Excel/CSV/Markdown，运行后会同时在网页展示结果，并生成可下载文件。
 
+Wind 不是必需项。若同事想配置自己的 Wind Key 作为后续增强或兜底数据源，见：
+
+```text
+docs/WIND_SETUP.md
+```
+
 ### 股票异动监控
 
 准备自选股模板：
@@ -174,6 +180,8 @@ python3 skills/analyst-profiler/scripts/score_analysts.py \
 ## 分享注意
 
 这个包不包含原始研报、PDF、公司内部资料或带教材料。建议只分享 skills、模板和示例分析，不要把版权材料或敏感数据一起上传到 GitHub。
+
+不要把个人 `WIND_API_KEY` 上传到 GitHub 或打包发给同事。谁配置 Key，谁消耗 Wind 额度。
 
 ## Notes
 

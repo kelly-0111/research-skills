@@ -242,9 +242,11 @@ def summarize_cause_for_preview(row: dict[str, Any], cause_by_code: dict[str, di
         status = cause.get("evidence_status", "")
         judgement = cause.get("cause_judgement", "")
         summary = cause.get("evidence_summary") or cause.get("notes") or ""
-        if len(summary) > 70:
-            summary = summary[:70] + "..."
-        return "；".join(part for part in [status, judgement, summary] if part)
+        if len(summary) > 55:
+            summary = summary[:55] + "..."
+        links = [url for url in str(cause.get("source_url_or_path", "")).split("；") if url.strip()]
+        link_text = "有链接" if links else "无链接"
+        return "；".join(part for part in [status, judgement, summary, link_text] if part)
     if row.get("is_abnormal") == "是":
         return "已触发异动，但本次未取得有效新闻线索；请查看 cause_check 或人工核验公告。"
     return "未触发异动阈值，未自动搜索新闻。"
@@ -709,13 +711,17 @@ class ResearchHandler(BaseHTTPRequestHandler):
         print("[%s] %s" % (self.log_date_time_string(), fmt % args))
 
     def send_bytes(self, status: int, body: bytes, content_type: str, headers: dict[str, str] | None = None) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The browser closed/refreshed the page while a response was being written.
+            return
 
     def send_json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(json_safe(payload), ensure_ascii=False, allow_nan=False).encode("utf-8")

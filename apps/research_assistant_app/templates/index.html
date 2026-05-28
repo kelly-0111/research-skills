@@ -23,13 +23,17 @@
     .sub { margin-left: auto; color: var(--muted); font-size: 13px; }
     main { max-width: 1280px; margin: 0 auto; padding: 24px; }
     .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-height: 360px; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-height: 520px; display: flex; flex-direction: column; gap: 0; }
+    .card-head { min-height: 132px; display: flex; flex-direction: column; gap: 12px; }
+    .card-form { height: 300px; display: flex; flex-direction: column; gap: 12px; }
+    .button-row { margin-top: auto; }
     h2 { margin: 0; font-size: 17px; }
     p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
     label { font-size: 13px; font-weight: 600; }
     input[type=file], select { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
     .row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
     button, a.btn { border: 0; border-radius: 6px; background: var(--blue); color: #fff; padding: 10px 12px; cursor: pointer; text-decoration: none; text-align: center; font-weight: 600; font-size: 13px; }
+    .card button { width: 100%; min-height: 46px; }
     button.secondary, a.secondary { background: #eef2ff; color: #1d4ed8; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     .result { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; font-size: 13px; }
@@ -66,6 +70,8 @@
       header { padding: 0 16px; }
       main { padding: 16px; }
       .report-box { border-left: 0; border-top: 1px solid var(--line); }
+      .card { min-height: 0; }
+      .card-form { height: auto; min-height: 0; }
     }
   </style>
 </head>
@@ -77,38 +83,50 @@
   <main>
     <div class="grid">
       <section class="card" data-tool="stock">
-        <h2>股票异动监控</h2>
-        <p>上传自选股 CSV/Excel，自动生成异动明细、新闻原因核验表和 Markdown 日报。</p>
-        <a class="btn secondary" href="/template/stock">下载自选股模板</a>
-        <label>自选股文件</label>
-        <input type="file" name="file" accept=".csv,.xlsx">
-        <label class="row"><input type="checkbox" name="skip_news"> 跳过新闻检索（更快）</label>
-        <button onclick="runTool('stock')">开始监控</button>
+        <div class="card-head">
+          <h2>股票异动监控</h2>
+          <p>上传自选股 CSV/Excel，自动生成异动明细、新闻原因核验表和 Markdown 日报。</p>
+          <a class="btn secondary" href="/template/stock">下载自选股模板</a>
+        </div>
+        <div class="card-form">
+          <label>自选股文件</label>
+          <input type="file" name="file" accept=".csv,.xlsx">
+          <label class="row"><input type="checkbox" name="skip_news"> 跳过新闻检索（更快）</label>
+          <div class="button-row"><button onclick="runTool('stock')">开始监控</button></div>
+        </div>
         <div class="result"></div>
       </section>
 
       <section class="card" data-tool="analyst">
-        <h2>卖方研究员画像</h2>
-        <p>上传研究员观点记录 CSV/Excel，生成研究员/团队评分卡和画像报告。</p>
-        <a class="btn secondary" href="/template/analyst">下载观点记录模板</a>
-        <label>输入格式</label>
-        <select name="input_type">
-          <option value="standard">标准 analyst_call_log</option>
-          <option value="alpha">Alpha Pai 导出表</option>
-        </select>
-        <label>研究员观点文件</label>
-        <input type="file" name="file" accept=".csv,.xlsx">
-        <button onclick="runTool('analyst')">生成画像</button>
+        <div class="card-head">
+          <h2>卖方研究员画像</h2>
+          <p>上传研究员观点记录 CSV/Excel，生成研究员/团队评分卡和画像报告。</p>
+          <a class="btn secondary" href="/template/analyst">下载观点记录模板</a>
+        </div>
+        <div class="card-form">
+          <label>输入格式</label>
+          <select name="input_type">
+            <option value="standard">标准 analyst_call_log</option>
+            <option value="alpha">Alpha Pai 导出表</option>
+          </select>
+          <label>研究员观点文件</label>
+          <input type="file" name="file" accept=".csv,.xlsx">
+          <div class="button-row"><button onclick="runTool('analyst')">生成画像</button></div>
+        </div>
         <div class="result"></div>
       </section>
 
       <section class="card" data-tool="drug">
-        <h2>创新药分析</h2>
-        <p>上传 Markdown 公司列表，生成结构化表、上涨逻辑拆解、后续预测和待核验清单。</p>
-        <a class="btn secondary" href="/template/drug">下载公司列表模板</a>
-        <label>公司列表 Markdown/TXT</label>
-        <input type="file" name="file" accept=".md,.txt,.csv">
-        <button onclick="runTool('drug')">生成分析报告</button>
+        <div class="card-head">
+          <h2>创新药分析</h2>
+          <p>上传 Markdown 公司列表，生成结构化表、上涨逻辑拆解、后续预测和待核验清单。</p>
+          <a class="btn secondary" href="/template/drug">下载公司列表模板</a>
+        </div>
+        <div class="card-form">
+          <label>公司列表 Markdown/TXT</label>
+          <input type="file" name="file" accept=".md,.txt,.csv">
+          <div class="button-row"><button onclick="runTool('drug')">生成分析报告</button></div>
+        </div>
         <div class="result"></div>
       </section>
     </div>
