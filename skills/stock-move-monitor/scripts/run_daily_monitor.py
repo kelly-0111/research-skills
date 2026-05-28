@@ -2,7 +2,8 @@
 """
 Daily A-share abnormal-move monitor.
 
-Data source: Eastmoney public quote and kline endpoints.
+Data source: Eastmoney public quote/K-line endpoints, with optional local
+efinance/akshare K-line fallbacks when those packages are installed.
 This is a research workflow demo, not investment advice.
 """
 
@@ -16,6 +17,8 @@ import ssl
 import sys
 import time
 import argparse
+import concurrent.futures
+import importlib.util
 import socket
 import html
 import xml.etree.ElementTree as ET
@@ -30,6 +33,7 @@ from urllib.request import Request, urlopen
 
 
 QUOTE_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+QUOTE_SINGLE_URL = "https://push2.eastmoney.com/api/qt/stock/get"
 KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 BING_NEWS_RSS_URL = "https://www.bing.com/news/search"
 KLINE_CACHE_ROOT = Path(os.environ.get("STOCK_MONITOR_CACHE_DIR", Path.cwd() / ".cache" / "stock_move_monitor"))
@@ -44,6 +48,8 @@ BROWSER_HEADERS = {
     "Referer": "https://quote.eastmoney.com/",
     "Connection": "close",
 }
+
+DEFAULT_KLINE_PROVIDERS = ("eastmoney", "efinance")
 
 CAUSE_SOURCE_PRIORITY = [
     "公司公告/交易所公告",
@@ -68,6 +74,21 @@ CAUSE_SIGNAL_TERMS = CAUSE_POSITIVE_TERMS + CAUSE_NEGATIVE_TERMS + [
     "盈利",
     "营收",
     "销售",
+]
+
+SOURCE_OFFICIAL_TERMS = ["公告", "交易所", "上交所", "深交所", "港交所", "披露", "公司公告", "临时公告"]
+SOURCE_NEWS_TERMS = ["证券", "财联社", "证券时报", "中国基金报", "上海证券报", "中证报", "每日经济新闻", "界面", "财新"]
+SOURCE_COMMENTARY_TERMS = ["研报", "评级", "券商", "观点", "点评", "机构"]
+
+CAUSE_CATEGORY_RULES = [
+    ("医药临床/BD/获批", ["临床", "获批", "NDA", "BLA", "IND", "BD", "授权", "license", "适应症", "管线"]),
+    ("业绩催化", ["业绩", "预增", "利润", "盈利", "营收", "亏损", "财报"]),
+    ("订单/合同", ["订单", "合同", "中标", "采购", "合作协议"]),
+    ("并购/重组", ["并购", "收购", "重组", "资产注入", "股权转让"]),
+    ("政策催化", ["政策", "医保", "集采", "监管", "审批", "指导意见"]),
+    ("产品/技术进展", ["产品", "技术", "研发", "上市", "新品", "商业化"]),
+    ("资金轮动", ["资金", "主力", "净流入", "北向", "放量", "涨停"]),
+    ("利空释放", ["减持", "处罚", "问询", "终止", "解禁", "风险"]),
 ]
 
 
@@ -204,6 +225,9 @@ def as_threshold(value: Any, default: float) -> float:
 
 
 def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
+    if os.environ.get("STOCK_MONITOR_FAST_MODE") == "1":
+        return fetch_single_quotes_concurrent(stocks)
+
     quotes: dict[str, dict[str, Any]] = {}
     for start in range(0, len(stocks), 5):
         batch = stocks[start : start + 5]
@@ -214,9 +238,10 @@ def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
             "secids": ",".join(stock.secid for stock in batch),
         }
         try:
-            data = fetch_json(QUOTE_URL, params)
+            data = fetch_json(QUOTE_URL, params, attempts=1, timeout=6, base_sleep=0.5)
         except RuntimeError as exc:
-            print(f"quote batch failed, fallback to kline: {exc}", file=sys.stderr)
+            progress(f"quote batch failed, fallback to single quote: {exc}")
+            quotes.update(fetch_single_quotes_concurrent(batch))
             continue
         diff = (data.get("data") or {}).get("diff") or []
         quotes.update({item["f12"]: item for item in diff})
@@ -224,14 +249,114 @@ def fetch_quotes(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
     return quotes
 
 
+def fetch_single_quotes_concurrent(stocks: list[Stock]) -> dict[str, dict[str, Any]]:
+    quotes: dict[str, dict[str, Any]] = {}
+    if not stocks:
+        return quotes
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(stocks))) as executor:
+        futures = {executor.submit(fetch_single_quote, stock): stock for stock in stocks}
+        for future in concurrent.futures.as_completed(futures):
+            stock = futures[future]
+            try:
+                quote = future.result()
+            except Exception as exc:
+                progress(f"single quote failed for {stock.code} {stock.name}: {exc}")
+                continue
+            if quote:
+                quotes[stock.code] = quote
+    return quotes
+
+
+def scale_quote_number(value: Any, precision: Any) -> float:
+    raw = as_float(value)
+    decimals = as_float(precision)
+    if math.isnan(raw):
+        return math.nan
+    if math.isnan(decimals):
+        decimals = 2
+    return raw / (10 ** int(decimals))
+
+
+def fetch_single_quote(stock: Stock) -> dict[str, Any]:
+    params = {
+        "secid": stock.secid,
+        "fields": "f57,f58,f43,f169,f170,f47,f48,f50,f59,f60,f62,f184",
+    }
+    try:
+        data = fetch_json(QUOTE_SINGLE_URL, params, attempts=1, timeout=5, base_sleep=0.5)
+    except RuntimeError as exc:
+        progress(f"single quote failed for {stock.code} {stock.name}: {exc}")
+        return {}
+    raw = data.get("data") or {}
+    if not raw:
+        return {}
+    precision = raw.get("f59")
+    return {
+        "f12": raw.get("f57") or stock.code,
+        "f14": raw.get("f58") or stock.name,
+        "f2": scale_quote_number(raw.get("f43"), precision),
+        "f3": as_float(raw.get("f170")) / 100 if not math.isnan(as_float(raw.get("f170"))) else math.nan,
+        "f4": scale_quote_number(raw.get("f169"), precision),
+        "f5": raw.get("f47"),
+        "f6": raw.get("f48"),
+        "f10": as_float(raw.get("f50")) / 100 if not math.isnan(as_float(raw.get("f50"))) else math.nan,
+        "f20": "",
+        "f21": "",
+        "f62": math.nan,
+        "f184": raw.get("f184"),
+    }
+
+
 def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
+    if os.environ.get("STOCK_MONITOR_FAST_MODE") == "1":
+        raise RuntimeError("K-line skipped in fast web mode; using quote data when available")
     cached = load_kline_cache(stock)
     if cached:
+        for row in cached:
+            row.setdefault("provider", "cache")
         return cached
+    if stock.secid.startswith("116.") and os.environ.get("STOCK_MONITOR_ENABLE_HK_KLINE") != "1":
+        raise RuntimeError("HK K-line skipped by default for web stability; set STOCK_MONITOR_ENABLE_HK_KLINE=1 to enable")
 
+    errors: list[str] = []
+    for provider in kline_providers_for(stock):
+        try:
+            rows = fetch_klines_from_provider(stock, provider)
+        except Exception as exc:
+            errors.append(f"{provider}: {exc}")
+            continue
+        if rows:
+            for row in rows:
+                row.setdefault("provider", provider)
+            save_kline_cache(stock, rows, provider=provider)
+            return rows
+    raise RuntimeError("; ".join(errors) or "No K-line provider returned data")
+
+
+def kline_providers_for(stock: Stock) -> tuple[str, ...]:
+    providers = list(DEFAULT_KLINE_PROVIDERS)
+    if stock.secid.startswith("116."):
+        # efinance/akshare HK endpoints are more likely to hang or disconnect in local tests.
+        providers = ["eastmoney"]
+    if os.environ.get("STOCK_MONITOR_ENABLE_AKSHARE") == "1":
+        providers.append("akshare")
+    return tuple(dict.fromkeys(providers))
+
+
+def fetch_klines_from_provider(stock: Stock, provider: str) -> list[dict[str, Any]]:
+    if provider == "eastmoney":
+        return fetch_klines_eastmoney(stock)
+    if provider == "efinance":
+        return fetch_klines_efinance(stock)
+    if provider == "akshare":
+        return fetch_klines_akshare(stock)
+    raise RuntimeError(f"Unknown K-line provider: {provider}")
+
+
+def fetch_klines_eastmoney(stock: Stock) -> list[dict[str, Any]]:
     data: dict[str, Any] = {}
     last_error: RuntimeError | None = None
-    for fqt in (1, 0):
+    for fqt in (1,):
         params = {
             "secid": stock.secid,
             "fields1": "f1,f2,f3,f4,f5,f6",
@@ -242,7 +367,7 @@ def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
             "end": "20500101",
         }
         try:
-            data = fetch_json(KLINE_URL, params, attempts=3, timeout=18, base_sleep=1.5)
+            data = fetch_json(KLINE_URL, params, attempts=1, timeout=4, base_sleep=0.5)
         except RuntimeError as exc:
             last_error = exc
             continue
@@ -270,11 +395,97 @@ def fetch_klines(stock: Stock) -> list[dict[str, Any]]:
                 "pct_chg": as_float(fields[8]),
                 "chg": as_float(fields[9]),
                 "turnover": as_float(fields[10]),
+                "provider": "eastmoney",
             }
         )
-    if out:
-        save_kline_cache(stock, out)
     return out
+
+
+def optional_module_available(name: str) -> bool:
+    return importlib.util.find_spec(name) is not None
+
+
+def normalized_stock_code(stock: Stock) -> str:
+    if stock.secid.startswith("116."):
+        return stock.code.zfill(5)
+    return stock.code
+
+
+def as_date_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    if " " in text:
+        text = text.split(" ", 1)[0]
+    if "T" in text:
+        text = text.split("T", 1)[0]
+    return text.replace("/", "-")
+
+
+def pick_value(row: dict[str, Any], names: list[str]) -> Any:
+    for name in names:
+        if name in row and row.get(name) not in ("", None):
+            return row.get(name)
+    return ""
+
+
+def normalize_kline_records(records: list[dict[str, Any]], provider: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for record in records:
+        date = as_date_text(pick_value(record, ["日期", "date", "Date", "时间"]))
+        close = as_float(pick_value(record, ["收盘", "close", "收盘价", "Close"]))
+        if not date or math.isnan(close):
+            continue
+        out.append(
+            {
+                "date": date,
+                "open": as_float(pick_value(record, ["开盘", "open", "开盘价", "Open"])),
+                "close": close,
+                "high": as_float(pick_value(record, ["最高", "high", "最高价", "High"])),
+                "low": as_float(pick_value(record, ["最低", "low", "最低价", "Low"])),
+                "volume": as_float(pick_value(record, ["成交量", "volume", "Volume"])),
+                "amount": as_float(pick_value(record, ["成交额", "amount", "成交金额", "Amount"])),
+                "amplitude": as_float(pick_value(record, ["振幅", "amplitude"])),
+                "pct_chg": as_float(pick_value(record, ["涨跌幅", "pct_chg", "涨跌幅%", "ChangePercent"])),
+                "chg": as_float(pick_value(record, ["涨跌额", "chg", "涨跌", "Change"])),
+                "turnover": as_float(pick_value(record, ["换手率", "turnover", "换手率%"])),
+                "provider": provider,
+            }
+        )
+    out.sort(key=lambda item: item["date"])
+    return out
+
+
+def fetch_klines_efinance(stock: Stock) -> list[dict[str, Any]]:
+    if not optional_module_available("efinance"):
+        raise RuntimeError("efinance not installed")
+    import efinance as ef  # type: ignore
+
+    df = ef.stock.get_quote_history(
+        normalized_stock_code(stock),
+        beg="20240101",
+        end="20500101",
+        klt=101,
+        fqt=1,
+    )
+    if df is None or getattr(df, "empty", True):
+        raise RuntimeError("efinance returned empty K-line data")
+    return normalize_kline_records(df.to_dict("records"), "efinance")
+
+
+def fetch_klines_akshare(stock: Stock) -> list[dict[str, Any]]:
+    if not optional_module_available("akshare"):
+        raise RuntimeError("akshare not installed")
+    import akshare as ak  # type: ignore
+
+    code = normalized_stock_code(stock)
+    if stock.secid.startswith("116."):
+        df = ak.stock_hk_hist(symbol=code, period="daily", start_date="20240101", end_date="20500101", adjust="qfq")
+    else:
+        df = ak.stock_zh_a_hist(symbol=code, period="daily", start_date="20240101", end_date="20500101", adjust="qfq")
+    if df is None or getattr(df, "empty", True):
+        raise RuntimeError("akshare returned empty K-line data")
+    return normalize_kline_records(df.to_dict("records"), "akshare")
 
 
 def kline_cache_path(stock: Stock, cache_date: str | None = None) -> Path:
@@ -297,13 +508,14 @@ def load_kline_cache(stock: Stock) -> list[dict[str, Any]]:
     return []
 
 
-def save_kline_cache(stock: Stock, rows: list[dict[str, Any]]) -> None:
+def save_kline_cache(stock: Stock, rows: list[dict[str, Any]], provider: str = "") -> None:
     path = kline_cache_path(stock)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "secid": stock.secid,
         "code": stock.code,
         "name": stock.name,
+        "provider": provider or (rows[-1].get("provider") if rows else ""),
         "cached_at": datetime.now().isoformat(timespec="seconds"),
         "rows": rows,
     }
@@ -333,6 +545,13 @@ def pct(value: float) -> str:
 
 def md_cell(value: Any) -> str:
     return str(value).replace("|", "｜").replace("\n", " ").strip()
+
+
+def progress(message: str) -> None:
+    try:
+        print(message, file=sys.stderr)
+    except (BrokenPipeError, ConnectionResetError, OSError):
+        return
 
 
 def calculate_streak(klines: list[dict[str, Any]]) -> int:
@@ -475,39 +694,151 @@ def fetch_bing_news_items(query: str, stock: Stock, max_results: int) -> list[di
     return parse_bing_news_rss(xml_text, stock, limit=max_results)
 
 
-def search_news_for_cause(stock: Stock, row: dict[str, Any], run_date: str, max_results: int = 3) -> tuple[list[dict[str, str]], str]:
+def search_news_for_cause(stock: Stock, row: dict[str, Any], run_date: str, max_results: int = 5) -> tuple[list[dict[str, str]], str]:
     queries = [
+        f"{stock.name} {stock.code} 公告 披露 {run_date}",
         primary_news_query(stock, row, run_date),
+        f"{stock.name} {stock.code} 业绩 合作 临床 获批",
         f"{stock.name} 新闻",
         f"{stock.name} 公告",
     ]
     last_error = ""
+    collected: list[dict[str, str]] = []
+    seen_links: set[str] = set()
     try:
         for query in dict.fromkeys(queries):
             items = fetch_bing_news_items(query, stock, max_results)
-            if items:
-                return items, ""
+            for item in items:
+                link = item.get("link", "")
+                key = link or item.get("title", "")
+                if key in seen_links:
+                    continue
+                seen_links.add(key)
+                collected.append(item)
+            if len(collected) >= max_results:
+                break
     except RuntimeError as exc:
         last_error = f"新闻检索失败：{exc}"
     if last_error:
-        return [], last_error
-    return [], ""
+        return collected, last_error
+    return collected[:max_results], ""
 
 
-def judge_news_cause(stock: Stock, row: dict[str, Any], news_items: list[dict[str, str]], news_error: str) -> tuple[str, str, str, str, str]:
-    if news_error:
-        return "检索失败", "待核验线索", "低", "", news_error
+def classify_source_type(item: dict[str, str]) -> str:
+    text = f"{item.get('title', '')} {item.get('source', '')} {item.get('link', '')}"
+    if any(term.lower() in text.lower() for term in SOURCE_OFFICIAL_TERMS):
+        return "公告/交易所披露"
+    if any(term.lower() in text.lower() for term in SOURCE_COMMENTARY_TERMS):
+        return "研报/市场评论"
+    if any(term.lower() in text.lower() for term in SOURCE_NEWS_TERMS):
+        return "财经新闻"
+    return "新闻/网页线索"
+
+
+def infer_matched_cause_categories(text: str) -> list[str]:
+    matched: list[str] = []
+    lowered = text.lower()
+    for category, terms in CAUSE_CATEGORY_RULES:
+        if any(term.lower() in lowered for term in terms):
+            matched.append(category)
+    return matched
+
+
+def score_news_relevance(stock: Stock, row: dict[str, Any], item: dict[str, str]) -> tuple[int, str, list[str]]:
+    text = f"{item.get('title', '')} {item.get('description', '')} {item.get('source', '')}"
+    score = 0
+    reasons: list[str] = []
+    if stock.name in text:
+        score += 35
+        reasons.append("匹配股票名称")
+    if stock.code in text:
+        score += 20
+        reasons.append("匹配股票代码")
+
+    source_type = classify_source_type(item)
+    if source_type == "公告/交易所披露":
+        score += 25
+        reasons.append("公告/披露来源")
+    elif source_type == "财经新闻":
+        score += 15
+        reasons.append("财经新闻来源")
+
+    categories = infer_matched_cause_categories(text)
+    if categories:
+        score += min(30, 10 * len(categories))
+        reasons.append("匹配原因类型：" + "/".join(categories[:3]))
+
+    if not math.isnan(row.get("pct_chg", math.nan)):
+        if row["pct_chg"] > 0 and any(term in text for term in CAUSE_POSITIVE_TERMS):
+            score += 10
+            reasons.append("方向偏正向")
+        if row["pct_chg"] < 0 and any(term in text for term in CAUSE_NEGATIVE_TERMS):
+            score += 10
+            reasons.append("方向偏负向")
+
+    return min(score, 100), source_type, categories
+
+
+def enrich_news_items(stock: Stock, row: dict[str, Any], news_items: list[dict[str, str]]) -> list[dict[str, str]]:
+    enriched: list[dict[str, str]] = []
+    for item in news_items:
+        score, source_type, categories = score_news_relevance(stock, row, item)
+        item = dict(item)
+        item["relevance_score"] = str(score)
+        item["source_type"] = source_type
+        item["matched_categories"] = ";".join(categories)
+        enriched.append(item)
+    enriched.sort(key=lambda item: int(item.get("relevance_score") or 0), reverse=True)
+    return enriched
+
+
+def build_analyst_judgement(
+    stock: Stock,
+    row: dict[str, Any],
+    news_items: list[dict[str, str]],
+    evidence_status: str,
+    cause_judgement: str,
+) -> str:
+    direction = "上涨" if not math.isnan(row["pct_chg"]) and row["pct_chg"] > 0 else "下跌" if not math.isnan(row["pct_chg"]) and row["pct_chg"] < 0 else "波动"
     if not news_items:
-        return "未发现明确来源", "无明显新闻", "低", "", "新闻 RSS 未返回与股票名称/代码直接匹配的结果。"
+        return f"初步判断：{stock.name}今日{direction}暂无直接新闻/公告证据，先按技术性或板块性波动处理，需人工核验公告。"
+    top = news_items[0]
+    categories = top.get("matched_categories") or "待核验"
+    source_type = top.get("source_type") or "来源"
+    score = top.get("relevance_score") or ""
+    qualifier = "较可能" if cause_judgement in {"已确认原因", "高相关线索"} else "可能"
+    return (
+        f"初步判断：{stock.name}今日{direction}{qualifier}与{categories}有关；"
+        f"最高相关来源为{source_type}，相关性{score}/100。"
+        f"仍需核验原文发布时间、正文细节与股价反应是否同日匹配。"
+    )
 
-    title_blob = " ".join(item.get("title", "") for item in news_items).lower()
+
+def judge_news_cause(stock: Stock, row: dict[str, Any], news_items: list[dict[str, str]], news_error: str) -> tuple[str, str, str, str, str, str]:
+    if news_error:
+        judgement = build_analyst_judgement(stock, row, news_items, "检索失败", "待核验线索")
+        return "检索失败", "待核验线索", "低", "", news_error, judgement
+    if not news_items:
+        judgement = build_analyst_judgement(stock, row, news_items, "未发现明确来源", "无明显新闻")
+        return "未发现明确来源", "无明显新闻", "低", "", "新闻 RSS 未返回与股票名称/代码直接匹配的结果。", judgement
+
+    news_items = enrich_news_items(stock, row, news_items)
+    title_blob = " ".join(f"{item.get('title', '')} {item.get('description', '')}" for item in news_items).lower()
     matched_terms = [term for term in CAUSE_POSITIVE_TERMS + CAUSE_NEGATIVE_TERMS if term.lower() in title_blob]
     evidence_summary = summarize_news_items(news_items)
-    if matched_terms:
+    best_score = int(news_items[0].get("relevance_score") or 0)
+    best_source_type = news_items[0].get("source_type", "")
+    if best_source_type == "公告/交易所披露" and best_score >= 70:
+        note = "检索到公告/披露类高相关来源；需核对公告原文是否直接对应今日股价异动。"
+        judgement = build_analyst_judgement(stock, row, news_items, "已检索", "已确认原因")
+        return "已检索", "已确认原因", "高", evidence_summary, note, judgement
+    if matched_terms or best_score >= 60:
         note = f"新闻标题匹配关键词：{';'.join(dict.fromkeys(matched_terms))}。仍需核对正文和公告原文。"
-        return "已检索", "高相关线索", "中", evidence_summary, note
+        judgement = build_analyst_judgement(stock, row, news_items, "已检索", "高相关线索")
+        return "已检索", "高相关线索", "中", evidence_summary, note, judgement
     note = "检索到相关新闻，但标题未直接指向公告、业绩、订单、政策、临床/BD等明确催化。"
-    return "已检索", "待核验线索", "低", evidence_summary, note
+    judgement = build_analyst_judgement(stock, row, news_items, "已检索", "待核验线索")
+    return "已检索", "待核验线索", "低", evidence_summary, note, judgement
 
 
 def summarize_news_items(news_items: list[dict[str, str]], limit: int = 3) -> str:
@@ -515,12 +846,16 @@ def summarize_news_items(news_items: list[dict[str, str]], limit: int = 3) -> st
     for item in news_items[:limit]:
         title = item.get("title", "")
         source = item.get("source") or "新闻源"
-        matched = [term for term in CAUSE_SIGNAL_TERMS if term.lower() in title.lower()]
-        if matched:
-            point = "关键词：" + "/".join(dict.fromkeys(matched[:4]))
+        source_type = item.get("source_type") or classify_source_type(item)
+        categories = item.get("matched_categories") or ";".join(infer_matched_cause_categories(title))
+        score = item.get("relevance_score", "")
+        if categories:
+            point = f"{source_type}，线索={categories.replace(';', '/')}"
         else:
-            point = "相关新闻，需核验正文"
-        summaries.append(f"{source}：{point}")
+            matched = [term for term in CAUSE_SIGNAL_TERMS if term.lower() in title.lower()]
+            point = "关键词：" + "/".join(dict.fromkeys(matched[:4])) if matched else "相关新闻，需核验正文"
+        score_text = f"，相关性{score}/100" if score else ""
+        summaries.append(f"{source}：{point}{score_text}")
     return "；".join(summaries)
 
 
@@ -532,13 +867,17 @@ def first_link_markdown(cause: dict[str, Any]) -> str:
 
 
 def compact_cause_summary(cause: dict[str, Any], max_len: int = 90) -> str:
-    summary = cause.get("evidence_summary") or cause.get("notes") or ""
+    summary = cause.get("analyst_judgement") or cause.get("evidence_summary") or cause.get("notes") or ""
     summary = re_space(str(summary))
     if len(summary) > max_len:
         summary = summary[:max_len] + "..."
     link = first_link_markdown(cause)
+    source = cause.get("top_source_type", "")
+    score = cause.get("top_relevance_score", "")
+    source_text = f"{source}/{score}" if source or score else ""
     parts = [
         f"{cause.get('evidence_status', '')}/{cause.get('cause_judgement', '')}".strip("/"),
+        source_text,
         summary,
         link,
     ]
@@ -563,9 +902,11 @@ def build_cause_checks(
             news_items, news_error = search_news_for_cause(stock, row, run_date)
         else:
             news_error = "新闻检索已关闭"
-        evidence_status, cause_judgement, cause_confidence, evidence_summary, news_notes = judge_news_cause(
+        news_items = enrich_news_items(stock, row, news_items)
+        evidence_status, cause_judgement, cause_confidence, evidence_summary, news_notes, analyst_judgement = judge_news_cause(
             stock, row, news_items, news_error
         )
+        top_item = news_items[0] if news_items else {}
         checks.append(
             {
                 "date": run_date,
@@ -581,17 +922,22 @@ def build_cause_checks(
                 "search_queries": build_search_queries(stock, row, run_date),
                 "news_search_query": primary_news_query(stock, row, run_date),
                 "matched_news_count": str(len(news_items)),
+                "top_source_type": top_item.get("source_type", ""),
+                "top_relevance_score": top_item.get("relevance_score", ""),
+                "matched_cause_categories": top_item.get("matched_categories", ""),
                 "evidence_status": evidence_status,
                 "cause_judgement": cause_judgement,
                 "confidence": cause_confidence,
                 "evidence_summary": evidence_summary,
+                "analyst_judgement": analyst_judgement,
                 "source_title": "；".join(item.get("title", "") for item in news_items[:3]),
                 "source_url_or_path": "；".join(item.get("link", "") for item in news_items[:3]),
                 "published_at": "；".join(item.get("published_at", "") for item in news_items[:3]),
                 "notes": f"{news_notes} 先查公告/交易所披露，再查权威新闻和行业事件；无来源前不要写成确认原因。",
             }
         )
-        time.sleep(0.4)
+        if enable_news_search:
+            time.sleep(0.4)
     return checks
 
 
@@ -605,7 +951,7 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         try:
             klines = fetch_klines(stock)
         except RuntimeError as exc:
-            print(f"kline failed for {stock.code} {stock.name}: {exc}", file=sys.stderr)
+            progress(f"kline failed for {stock.code} {stock.name}: {exc}")
             klines = []
             kline_status = "failed"
             kline_error = str(exc)
@@ -613,6 +959,7 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         amounts = [r["amount"] for r in recent[:-1] if not math.isnan(r["amount"])]
         ma20_amount = sum(amounts) / len(amounts) if amounts else math.nan
         latest_kline_date = klines[-1]["date"] if klines else ""
+        kline_provider = klines[-1].get("provider", "") if klines else ""
 
         amount = as_float(quote.get("f6"))
         if math.isnan(amount) and klines:
@@ -653,6 +1000,7 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
             "streak": calculate_streak(klines),
             "latest_kline_date": latest_kline_date,
             "kline_status": kline_status,
+            "kline_provider": kline_provider,
             "data_quality": data_quality,
             "kline_error": kline_error,
             "keywords": stock.keywords,
@@ -664,8 +1012,8 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         row["next_action"] = next_action
         row["is_abnormal"] = "是" if flags != ["常规跟踪"] else "否"
         rows.append(row)
-        time.sleep(0.9)
-        print(f"[{i:02d}/{len(stocks)}] {stock.code} {stock.name} done", file=sys.stderr)
+        time.sleep(0.2)
+        progress(f"[{i:02d}/{len(stocks)}] {stock.code} {stock.name} done")
     rows.sort(
         key=lambda r: (
             r["is_abnormal"] != "是",
@@ -694,6 +1042,7 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
         "streak",
         "latest_kline_date",
         "kline_status",
+        "kline_provider",
         "data_quality",
         "is_abnormal",
         "abnormal_type",
@@ -731,10 +1080,14 @@ def write_cause_checks(rows: list[dict[str, Any]], path: Path) -> None:
         "search_queries",
         "news_search_query",
         "matched_news_count",
+        "top_source_type",
+        "top_relevance_score",
+        "matched_cause_categories",
         "evidence_status",
         "cause_judgement",
         "confidence",
         "evidence_summary",
+        "analyst_judgement",
         "source_title",
         "source_url_or_path",
         "published_at",
@@ -779,16 +1132,16 @@ def markdown_table(rows: list[dict[str, Any]], limit: int = 20) -> str:
 def cause_markdown_table(cause_checks: list[dict[str, Any]], limit: int = 12) -> str:
     if not cause_checks:
         return "今日无异动股票需要原因核验。"
-    header = "| 股票 | 异动类型 | 原因分类 | 新闻匹配 | 判断 | 摘要 | 链接 |\n"
+    header = "| 股票 | 异动类型 | 最高相关来源 | 相关性 | 判断 | 初步结论 | 链接 |\n"
     sep = "|---|---|---|---:|---|---|---|\n"
     body = []
     for row in cause_checks[:limit]:
-        summary = row.get("evidence_summary") or row.get("notes", "")
-        if len(summary) > 80:
-            summary = summary[:80] + "..."
+        summary = row.get("analyst_judgement") or row.get("evidence_summary") or row.get("notes", "")
+        if len(summary) > 110:
+            summary = summary[:110] + "..."
         link = first_link_markdown(row)
         body.append(
-            f"| {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['abnormal_type'])} | {md_cell(row['cause_categories'])} | {md_cell(row.get('matched_news_count', ''))} | {md_cell(row['evidence_status'] + '/' + row['cause_judgement'])} | {md_cell(summary)} | {link} |"
+            f"| {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['abnormal_type'])} | {md_cell(row.get('top_source_type', '') or '无')} | {md_cell(row.get('top_relevance_score', '') or '0')} | {md_cell(row['evidence_status'] + '/' + row['cause_judgement'])} | {md_cell(summary)} | {link} |"
         )
     return header + sep + "\n".join(body)
 
@@ -923,6 +1276,13 @@ def write_report(
     down_count = sum(1 for r in rows if not math.isnan(r["pct_chg"]) and r["pct_chg"] < 0)
     cause_by_code = {row["code"]: row for row in cause_checks}
     theme_counts = "；".join(f"{name} {count}" for name, count in count_by(rows, "theme")[:6])
+    kline_sources = "；".join(f"{name} {count}" for name, count in count_by(kline_ok, "kline_provider"))
+    optional_sources = []
+    optional_sources.append(f"efinance={'已安装' if optional_module_available('efinance') else '未安装'}")
+    akshare_status = "已安装/未默认启用" if optional_module_available("akshare") else "未安装"
+    if os.environ.get("STOCK_MONITOR_ENABLE_AKSHARE") == "1" and optional_module_available("akshare"):
+        akshare_status = "已启用"
+    optional_sources.append(f"akshare={akshare_status}")
     lines = [
         "# 每日异动监控简报",
         "",
@@ -932,9 +1292,11 @@ def write_report(
         f"- 行情成功数量：{len(quote_ok)}/{len(rows)}",
         f"- 量比可用数量：{len(amount_ratio_ok)}/{len(rows)}",
         f"- K线成功数量：{len(kline_ok)}/{len(rows)}（仅影响连续涨跌和20日均额；若实时量比可用，不影响基础异动扫描）",
+        f"- K线来源分布：{kline_sources or '无'}",
         f"- 上涨/下跌数量：{up_count}/{down_count}",
         f"- 主要主题分布：{theme_counts}",
-        "- 数据源：东方财富公开行情/K线接口",
+        "- 数据源：东方财富公开行情/K线接口；A股 K线失败时会尝试 efinance 兜底；akshare 可通过环境变量 STOCK_MONITOR_ENABLE_AKSHARE=1 启用",
+        f"- 可选数据包状态：{'；'.join(optional_sources)}",
         "- 说明：本报告用于投研 workflow 测试，不构成投资建议；无来源支持的原因分析均为待核验线索。",
         "",
         "## 一、盘面概览",

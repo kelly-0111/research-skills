@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import csv
+import contextlib
 import importlib.util
 import io
 import json
 import math
 import mimetypes
+import os
 import sys
 import threading
 import traceback
@@ -44,6 +46,19 @@ OUTPUT_DIR = APP_DIR / "outputs"
 UPLOAD_DIR = APP_DIR / "uploads"
 OUTPUT_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+@contextlib.contextmanager
+def temporary_env(key: str, value: str):
+    old_value = os.environ.get(key)
+    os.environ[key] = value
+    try:
+        yield
+    finally:
+        if old_value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = old_value
 
 
 def load_module(name: str, path: Path):
@@ -241,12 +256,15 @@ def summarize_cause_for_preview(row: dict[str, Any], cause_by_code: dict[str, di
     if cause:
         status = cause.get("evidence_status", "")
         judgement = cause.get("cause_judgement", "")
-        summary = cause.get("evidence_summary") or cause.get("notes") or ""
-        if len(summary) > 55:
-            summary = summary[:55] + "..."
+        source_type = cause.get("top_source_type", "")
+        score = cause.get("top_relevance_score", "")
+        summary = cause.get("analyst_judgement") or cause.get("evidence_summary") or cause.get("notes") or ""
+        if len(summary) > 70:
+            summary = summary[:70] + "..."
         links = [url for url in str(cause.get("source_url_or_path", "")).split("；") if url.strip()]
         link_text = "有链接" if links else "无链接"
-        return "；".join(part for part in [status, judgement, summary, link_text] if part)
+        source_text = f"{source_type}/{score}" if source_type or score else ""
+        return "；".join(part for part in [status, judgement, source_text, summary, link_text] if part)
     if row.get("is_abnormal") == "是":
         return "已触发异动，但本次未取得有效新闻线索；请查看 cause_check 或人工核验公告。"
     return "未触发异动阈值，未自动搜索新闻。"
@@ -259,6 +277,7 @@ def build_stock_preview(rows: list[dict[str, Any]], cause_checks: list[dict[str,
     data_rows = [row for row in rows if to_float(row.get("pct_chg")) is not None or to_float(row.get("price")) is not None]
     kline_rows = [row for row in rows if row.get("kline_status") == "ok"]
     amount_ratio_rows = [row for row in rows if to_float(row.get("amount_ratio")) is not None]
+    kline_sources = count_items([row.get("kline_provider", "") for row in kline_rows if row.get("kline_provider")])
     sorted_rows = sorted(rows, key=lambda row: abs(to_float(row.get("pct_chg")) or 0), reverse=True)
     data_tone = "bad" if rows and len(data_rows) == 0 else "warn" if rows and len(data_rows) < len(rows) else "good"
     kline_tone = "bad" if rows and len(kline_rows) == 0 else "warn" if rows and len(kline_rows) < len(rows) else "good"
@@ -281,6 +300,7 @@ def build_stock_preview(rows: list[dict[str, Any]], cause_checks: list[dict[str,
         ],
         "secondaryMetrics": [
             metric("K线成功", f"{len(kline_rows)}/{len(rows)}", kline_tone),
+            metric("K线来源", kline_sources[0][0] if kline_sources else "NA", kline_tone),
             metric("连续涨跌", "可用" if len(kline_rows) == len(rows) else "部分不可用", kline_tone),
         ],
         "tableTitle": "异动明细预览",
@@ -292,6 +312,7 @@ def build_stock_preview(rows: list[dict[str, Any]], cause_checks: list[dict[str,
                 ("pct_chg", "涨跌幅%"),
                 ("amount_ratio", "量比"),
                 ("amount_ratio_source", "量比来源"),
+                ("kline_provider", "K线来源"),
                 ("is_abnormal", "异动"),
                 ("abnormal_type", "异动类型"),
                 ("confidence", "置信度"),
@@ -605,14 +626,20 @@ def run_stock_monitor(fields: dict[str, Any]) -> dict[str, Any]:
     out_dir = OUTPUT_DIR / f"stock_{timestamp()}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = stock_monitor.build_rows(stocks)
+    with (
+        temporary_env("STOCK_MONITOR_FAST_MODE", "1"),
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
+    ):
+        rows = stock_monitor.build_rows(stocks)
     stocks_by_code = {stock.code: stock for stock in stocks}
-    cause_checks = stock_monitor.build_cause_checks(
-        rows,
-        stocks_by_code,
-        run_date,
-        enable_news_search=fields.get("skip_news") != "true",
-    )
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        cause_checks = stock_monitor.build_cause_checks(
+            rows,
+            stocks_by_code,
+            run_date,
+            enable_news_search=fields.get("skip_news") != "true",
+        )
     report_path = out_dir / f"daily_report_{run_date}.md"
     stock_monitor.write_csv(rows, out_dir / f"daily_monitor_{run_date}.csv")
     stock_monitor.write_cause_checks(cause_checks, out_dir / f"cause_check_{run_date}.csv")

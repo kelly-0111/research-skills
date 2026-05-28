@@ -83,7 +83,7 @@ python3 scripts/run_daily_monitor.py \
   --output-dir outputs/stock_move_monitor
 ```
 
-基础版不需要安装 `adata` 或其他行情 SDK，默认使用脚本内置的公开行情接口。`adata` 可以作为本机可选增强，但不作为 share package 的必装依赖。
+基础版不需要安装任何行情 SDK，默认使用脚本内置的公开行情接口。若本机已经安装 `efinance`，A 股 K 线失败时会自动作为兜底源；`akshare` 因公开接口偶发断连，默认不启用，可通过 `STOCK_MONITOR_ENABLE_AKSHARE=1` 作为深度兜底；`adata` 也可以后续作为本机可选增强，但都不作为 share package 的必装依赖。
 
 示例：
 

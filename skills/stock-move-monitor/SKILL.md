@@ -7,7 +7,7 @@ description: Build and run an A-share daily stock abnormal-move monitoring workf
 
 ## Overview
 
-Use this skill to turn an A-share watchlist into a daily abnormal-move research brief. The default workflow uses Eastmoney public quote/K-line endpoints, calculates simple abnormal-move signals, and writes a Markdown report plus CSV detail table.
+Use this skill to turn an A-share watchlist into a daily abnormal-move research brief. The default workflow uses Eastmoney public quote/K-line endpoints, optionally falls back to local `efinance` K-line data when installed, calculates simple abnormal-move signals, and writes a Markdown report plus CSV detail table. `akshare` is available only as an opt-in deep fallback via `STOCK_MONITOR_ENABLE_AKSHARE=1`.
 
 Treat outputs as research workflow artifacts, not investment advice. Do not state unverified news or causal explanations as facts; label them as leads to verify unless source-backed.
 
@@ -31,7 +31,7 @@ python3 scripts/run_daily_monitor.py \
 
 If network access is blocked or SSL CA verification fails, request permission to access the public market-data endpoint. The bundled script uses an unverified SSL context only for public quote/K-line/news pulls because some local Python installs lack CA roots. This setting is only for public data retrieval; do not reuse it for login flows, private APIs, paid databases, or requests containing tokens.
 
-The default script does not require `adata` or any third-party market-data SDK. If adding `adata` later, keep it optional and preserve the no-SDK fallback. Read `references/data_providers.md` before changing data providers.
+The default script does not require `efinance`, `akshare`, `adata`, or any third-party market-data SDK. If these packages are installed locally, they may be used as optional fallbacks; preserve the no-SDK baseline. Read `references/data_providers.md` before changing data providers.
 
 ## Workflow
 
@@ -40,7 +40,7 @@ The default script does not require `adata` or any third-party market-data SDK. 
 
 2. **Fetch market data**
    Pull real-time quote fields and daily K-lines. Keep the script's data-source note in the report.
-   The default provider is the bundled no-SDK Eastmoney public endpoint path. Optional SDKs such as `adata` must not become required for the share package.
+   The default provider is the bundled no-SDK Eastmoney public endpoint path. Optional SDKs such as `efinance`, `akshare`, or `adata` must not become required for the share package.
 
 3. **Calculate signals**
    Default signals:
@@ -50,7 +50,7 @@ The default script does not require `adata` or any third-party market-data SDK. 
    - absolute main fund-flow percentage >= 8%
 
 4. **Build cause-check queue**
-   For abnormal rows, generate search queries, run automatic news RSS search, record matched titles/links, source priority, cause categories, evidence status, and judgement labels. Read `references/cause_checking.md` when changing news/announcement retrieval.
+   For abnormal rows, generate search queries, run automatic news RSS search, rank matched sources by source type and relevance score, record matched titles/links, cause categories, evidence status, judgement labels, and a one-sentence analyst judgement. Read `references/cause_checking.md` when changing news/announcement retrieval.
 
 5. **Generate the report**
    Prioritize abnormal rows first. Include table columns for code/name, industry, pct change, amount, amount ratio, main net inflow, abnormal type, and confidence.
@@ -71,4 +71,4 @@ The default script does not require `adata` or any third-party market-data SDK. 
 - `scripts/run_daily_monitor.py`: runnable A-share abnormal-move monitor.
 - `references/schema.md`: watchlist and output-field schema.
 - `references/cause_checking.md`: source priority and judgement labels for abnormal-move cause checks.
-- `references/data_providers.md`: default no-SDK provider and optional `adata` fallback rules.
+- `references/data_providers.md`: default no-SDK provider and optional fallback rules.

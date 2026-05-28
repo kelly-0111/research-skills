@@ -22,11 +22,15 @@ The bundled script uses a no-key Bing News RSS search for each abnormal stock. I
 
 - news search query
 - matched news count
+- highest-ranked source type
+- relevance score
+- matched cause categories
 - source title
 - source URL/path
 - publish time
 - evidence summary
 - cause judgement
+- one-sentence analyst judgement with caveats
 
 If RSS search fails, the script must still generate the daily report and mark `evidence_status=检索失败`.
 
@@ -39,6 +43,19 @@ If RSS search fails, the script must still generate the daily report and mark `e
 | 3 | Industry or sector events | Useful for `板块联动` and `资金轮动` |
 | 4 | Research reports and market commentary | Treat as interpretation; keep as `待核验线索` unless cross-checked |
 | 5 | Social media or unsourced summaries | Low-confidence lead only |
+
+## Relevance Scoring
+
+The script gives each matched source a 0-100 heuristic score. It rewards:
+
+- direct stock-name match
+- direct stock-code match
+- announcement/exchange-disclosure source
+- reputable financial-news source
+- matched cause category such as earnings, orders, policy, pharma clinical/BD/approval, or fund rotation
+- directional consistency with the stock move
+
+Use the score to triage review order, not as proof of causality.
 
 ## Cause Categories
 

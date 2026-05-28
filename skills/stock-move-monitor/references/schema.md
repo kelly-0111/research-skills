@@ -37,6 +37,7 @@ Important fields:
 | `streak` | Positive for consecutive up days, negative for consecutive down days |
 | `latest_kline_date` | Latest available K-line date |
 | `kline_status` | `ok` or `failed` |
+| `kline_provider` | Provider used for K-line data: `eastmoney`, `efinance`, `akshare`, or `cache` |
 | `data_quality` | Whether quote/K-line-derived fields are complete |
 | `is_abnormal` | `是` when any abnormal signal triggers |
 | `abnormal_type` | Semicolon-separated signal labels |
@@ -63,10 +64,14 @@ Default file: `outputs/cause_check_YYYY-MM-DD.csv`
 | `search_queries` | Generated search queries for news/announcement retrieval |
 | `news_search_query` | Query used by automatic news RSS search |
 | `matched_news_count` | Number of matched news items |
+| `top_source_type` | Type of the highest-ranked source: announcement/disclosure, financial news, commentary, or web lead |
+| `top_relevance_score` | Heuristic relevance score from 0 to 100 |
+| `matched_cause_categories` | Cause categories matched in the highest-ranked source |
 | `evidence_status` | `待检索`, `已检索`, or `未发现明确来源` |
 | `cause_judgement` | `已确认原因`, `高相关线索`, `待核验线索`, or `无明显新闻` |
 | `confidence` | Cause confidence after source review |
 | `evidence_summary` | Short summary of matched source titles |
+| `analyst_judgement` | One-sentence research-facing interpretation with caveats |
 | `source_title` | Supporting source title |
 | `source_url_or_path` | URL or local path |
 | `published_at` | Source publish date/time |
@@ -84,4 +89,4 @@ The Markdown brief should include:
 
 ## Dependency Standard
 
-The base monitor should require only Python standard-library modules. Optional providers such as `adata` can be documented or added later, but CSV/report generation must still work without them.
+The base monitor should require only Python standard-library modules. Optional providers such as `efinance`, `akshare`, or `adata` can be documented or added later, but CSV/report generation must still work without them.
