@@ -92,6 +92,7 @@
           <label>自选股文件</label>
           <input type="file" name="file" accept=".csv,.xlsx">
           <label class="row"><input type="checkbox" name="skip_news"> 跳过新闻检索（更快）</label>
+          <label class="row"><input type="checkbox" name="include_kline_chart"> 生成K线标注图（较慢）</label>
           <div class="button-row"><button onclick="runTool('stock')">开始监控</button></div>
         </div>
         <div class="result"></div>
@@ -210,6 +211,8 @@
       data.append('file', file);
       const skipNews = card.querySelector('input[name=skip_news]');
       if (skipNews) data.append('skip_news', skipNews.checked ? 'true' : 'false');
+      const includeKlineChart = card.querySelector('input[name=include_kline_chart]');
+      if (includeKlineChart) data.append('include_kline_chart', includeKlineChart.checked ? 'true' : 'false');
       const inputType = card.querySelector('select[name=input_type]');
       if (inputType) data.append('input_type', inputType.value);
 

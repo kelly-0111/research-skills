@@ -23,7 +23,7 @@ import socket
 import html
 import xml.etree.ElementTree as ET
 from http.client import RemoteDisconnected
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -104,6 +104,7 @@ class Stock:
     keywords: str
     pct_threshold: float
     amount_ratio_threshold: float
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @property
     def secid(self) -> str:
@@ -210,6 +211,7 @@ def load_watchlist(path: Path) -> list[Stock]:
                 keywords=row["keywords"],
                 pct_threshold=pct_threshold,
                 amount_ratio_threshold=amount_ratio_threshold,
+                raw=dict(row),
             )
         )
     return stocks
@@ -304,6 +306,46 @@ def fetch_single_quote(stock: Stock) -> dict[str, Any]:
         "f21": "",
         "f62": math.nan,
         "f184": raw.get("f184"),
+    }
+
+
+def first_raw_value(raw: dict[str, Any], names: list[str]) -> Any:
+    for name in names:
+        value = raw.get(name)
+        if value not in ("", None, "-"):
+            return value
+    return ""
+
+
+def fallback_quote_from_watchlist(stock: Stock) -> dict[str, Any]:
+    raw = stock.raw or {}
+    price = as_float(first_raw_value(raw, ["price", "close", "latest_price", "last_price", "收盘价", "最新价"]))
+    pct_chg = as_float(first_raw_value(raw, ["pct_chg", "chg_pct", "change_pct", "涨跌幅", "涨跌幅%"]))
+    amount = as_float(first_raw_value(raw, ["amount", "成交额"]))
+    amount_yi = as_float(first_raw_value(raw, ["amount_yi", "成交额_亿", "成交额(亿)"]))
+    if math.isnan(amount) and not math.isnan(amount_yi):
+        amount = amount_yi * 100000000
+    amount_ratio = as_float(first_raw_value(raw, ["amount_ratio", "volume_ratio", "量比"]))
+    chg = as_float(first_raw_value(raw, ["chg", "change", "涨跌额"]))
+    if math.isnan(chg) and not math.isnan(price) and not math.isnan(pct_chg) and pct_chg != -100:
+        previous = price / (1 + pct_chg / 100)
+        chg = price - previous
+    if math.isnan(price) and math.isnan(pct_chg) and math.isnan(amount_ratio):
+        return {}
+    return {
+        "f12": stock.code,
+        "f14": stock.name,
+        "f2": price,
+        "f3": pct_chg,
+        "f4": chg,
+        "f5": "",
+        "f6": amount,
+        "f10": amount_ratio,
+        "f20": "",
+        "f21": "",
+        "f62": math.nan,
+        "f184": math.nan,
+        "__source": "uploaded_watchlist",
     }
 
 
@@ -526,7 +568,7 @@ def as_float(value: Any) -> float:
     try:
         if value in ("-", None, ""):
             return math.nan
-        return float(value)
+        return float(str(value).replace(",", "").strip())
     except Exception:
         return math.nan
 
@@ -946,6 +988,8 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for i, stock in enumerate(stocks, 1):
         quote = quotes.get(stock.code, {})
+        if not quote:
+            quote = fallback_quote_from_watchlist(stock)
         kline_status = "ok"
         kline_error = ""
         try:
@@ -978,7 +1022,10 @@ def build_rows(stocks: list[Stock]) -> list[dict[str, Any]]:
         elif not math.isnan(amount_ratio):
             data_quality = "K线缺失：使用实时量比；连续涨跌不可用"
         elif quote:
-            data_quality = "K线缺失：涨跌幅可用；量比/连续涨跌不可用"
+            if quote.get("__source") == "uploaded_watchlist":
+                data_quality = "使用上传表快照；K线缺失；量比/连续涨跌可能不可用"
+            else:
+                data_quality = "K线缺失：涨跌幅可用；量比/连续涨跌不可用"
         else:
             data_quality = "行情与K线均缺失"
 
@@ -1144,6 +1191,169 @@ def cause_markdown_table(cause_checks: list[dict[str, Any]], limit: int = 12) ->
             f"| {md_cell(row['code'])} {md_cell(row['name'])} | {md_cell(row['abnormal_type'])} | {md_cell(row.get('top_source_type', '') or '无')} | {md_cell(row.get('top_relevance_score', '') or '0')} | {md_cell(row['evidence_status'] + '/' + row['cause_judgement'])} | {md_cell(summary)} | {link} |"
         )
     return header + sep + "\n".join(body)
+
+
+def html_cell(value: Any) -> str:
+    return html.escape(str(value or ""), quote=True)
+
+
+def kline_annotation_text(row: dict[str, Any], cause: dict[str, Any] | None) -> str:
+    parts = [
+        row.get("abnormal_type", ""),
+        f"涨跌幅 {pct(row['pct_chg'])}" if not math.isnan(row["pct_chg"]) else "",
+        f"量比 {row['amount_ratio']:.2f}x" if not math.isnan(row["amount_ratio"]) else "",
+    ]
+    if cause:
+        parts.append(cause.get("analyst_judgement") or cause.get("evidence_summary") or cause.get("cause_judgement") or "")
+    return "；".join(part for part in parts if part)
+
+
+def render_kline_svg(klines: list[dict[str, Any]], row: dict[str, Any], cause: dict[str, Any] | None) -> str:
+    recent = [item for item in klines[-60:] if not math.isnan(item["high"]) and not math.isnan(item["low"])]
+    if not recent:
+        return "<p class=\"empty\">本次没有可用 K 线，无法画图。</p>"
+
+    width, height = 900, 320
+    pad_l, pad_r, pad_t, pad_b = 58, 24, 28, 54
+    chart_w = width - pad_l - pad_r
+    chart_h = height - pad_t - pad_b
+    high = max(item["high"] for item in recent)
+    low = min(item["low"] for item in recent)
+    if high <= low:
+        high = low + 1
+
+    def x_at(index: int) -> float:
+        if len(recent) == 1:
+            return pad_l + chart_w / 2
+        return pad_l + chart_w * index / (len(recent) - 1)
+
+    def y_at(price: float) -> float:
+        return pad_t + (high - price) * chart_h / (high - low)
+
+    candle_w = max(4, min(12, chart_w / max(len(recent), 1) * 0.55))
+    parts = [
+        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{html_cell(row['code'])} {html_cell(row['name'])} K线标注\">",
+        "<rect x=\"0\" y=\"0\" width=\"900\" height=\"320\" fill=\"#fff\"/>",
+        f"<line x1=\"{pad_l}\" y1=\"{pad_t}\" x2=\"{pad_l}\" y2=\"{pad_t + chart_h}\" stroke=\"#d7dde8\"/>",
+        f"<line x1=\"{pad_l}\" y1=\"{pad_t + chart_h}\" x2=\"{pad_l + chart_w}\" y2=\"{pad_t + chart_h}\" stroke=\"#d7dde8\"/>",
+    ]
+
+    for ratio in (0, 0.25, 0.5, 0.75, 1):
+        price = high - (high - low) * ratio
+        y = pad_t + chart_h * ratio
+        parts.append(f"<line x1=\"{pad_l}\" y1=\"{y:.1f}\" x2=\"{pad_l + chart_w}\" y2=\"{y:.1f}\" stroke=\"#eef2f7\"/>")
+        parts.append(f"<text x=\"8\" y=\"{y + 4:.1f}\" font-size=\"12\" fill=\"#667085\">{price:.2f}</text>")
+
+    for idx, item in enumerate(recent):
+        x = x_at(idx)
+        open_price = item["open"]
+        close_price = item["close"]
+        color = "#d64545" if close_price >= open_price else "#16845f"
+        y_high = y_at(item["high"])
+        y_low = y_at(item["low"])
+        y_open = y_at(open_price)
+        y_close = y_at(close_price)
+        body_y = min(y_open, y_close)
+        body_h = max(2, abs(y_close - y_open))
+        parts.append(f"<line x1=\"{x:.1f}\" y1=\"{y_high:.1f}\" x2=\"{x:.1f}\" y2=\"{y_low:.1f}\" stroke=\"{color}\" stroke-width=\"1.3\"/>")
+        parts.append(
+            f"<rect x=\"{x - candle_w / 2:.1f}\" y=\"{body_y:.1f}\" width=\"{candle_w:.1f}\" height=\"{body_h:.1f}\" fill=\"{color}\" opacity=\"0.82\"/>"
+        )
+
+    annotation_idx = len(recent) - 1
+    latest_date = row.get("latest_kline_date")
+    for idx, item in enumerate(recent):
+        if latest_date and item.get("date") == latest_date:
+            annotation_idx = idx
+            break
+    mark = recent[annotation_idx]
+    mx = x_at(annotation_idx)
+    my = y_at(mark["high"])
+    label = html_cell(kline_annotation_text(row, cause))
+    if len(label) > 86:
+        label = label[:86] + "..."
+    label_y = max(24, my - 34)
+    parts.extend(
+        [
+            f"<line x1=\"{mx:.1f}\" y1=\"{pad_t}\" x2=\"{mx:.1f}\" y2=\"{pad_t + chart_h}\" stroke=\"#2f66e8\" stroke-dasharray=\"4 4\"/>",
+            f"<circle cx=\"{mx:.1f}\" cy=\"{my:.1f}\" r=\"5\" fill=\"#2f66e8\"/>",
+            f"<rect x=\"{min(mx + 8, width - 430):.1f}\" y=\"{label_y:.1f}\" width=\"410\" height=\"42\" rx=\"6\" fill=\"#eef4ff\" stroke=\"#b9cdfd\"/>",
+            f"<text x=\"{min(mx + 20, width - 418):.1f}\" y=\"{label_y + 17:.1f}\" font-size=\"12\" fill=\"#1b3f94\">{html_cell(mark.get('date', ''))}</text>",
+            f"<text x=\"{min(mx + 20, width - 418):.1f}\" y=\"{label_y + 34:.1f}\" font-size=\"12\" fill=\"#1f2937\">{label}</text>",
+            f"<text x=\"{pad_l}\" y=\"{height - 18}\" font-size=\"12\" fill=\"#667085\">{html_cell(recent[0].get('date', ''))}</text>",
+            f"<text x=\"{width - 96}\" y=\"{height - 18}\" font-size=\"12\" fill=\"#667085\">{html_cell(recent[-1].get('date', ''))}</text>",
+            "</svg>",
+        ]
+    )
+    return "\n".join(parts)
+
+
+def write_kline_annotations(
+    rows: list[dict[str, Any]],
+    stocks_by_code: dict[str, Stock],
+    cause_checks: list[dict[str, Any]],
+    path: Path,
+    *,
+    limit: int = 12,
+) -> None:
+    cause_by_code = {row["code"]: row for row in cause_checks}
+    selected = [row for row in rows if row.get("is_abnormal") == "是"] or rows
+    selected = selected[:limit]
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cards: list[str] = []
+    for row in selected:
+        stock = stocks_by_code.get(row["code"])
+        cause = cause_by_code.get(row["code"])
+        try:
+            klines = fetch_klines(stock) if stock else []
+            chart = render_kline_svg(klines, row, cause)
+            chart_note = f"K线来源：{html_cell((klines[-1].get('provider') if klines else '') or row.get('kline_provider') or '无')}"
+        except Exception as exc:
+            chart = f"<p class=\"empty\">本次没有可用 K 线，无法画图。原因：{html_cell(exc)}</p>"
+            chart_note = "K线来源：无"
+        cause_text = compact_cause_summary(cause, max_len=180) if cause else "未进入原因核验。"
+        cards.append(
+            "\n".join(
+                [
+                    "<section class=\"card\">",
+                    f"<h2>{html_cell(row['code'])} {html_cell(row['name'])}</h2>",
+                    f"<div class=\"meta\">{html_cell(row.get('industry', ''))} / {html_cell(row.get('theme', ''))} / {chart_note}</div>",
+                    chart,
+                    "<div class=\"summary\">",
+                    f"<b>异动：</b>{html_cell(row.get('abnormal_type', ''))}　",
+                    f"<b>置信度：</b>{html_cell(row.get('confidence', ''))}　",
+                    f"<b>原因线索：</b>{html_cell(cause_text)}",
+                    "</div>",
+                    "</section>",
+                ]
+            )
+        )
+
+    html_text = f"""<!doctype html>
+<html lang=\"zh-CN\">
+<head>
+  <meta charset=\"utf-8\">
+  <title>K线异动标注</title>
+  <style>
+    body {{ margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fb; color: #1f2937; }}
+    h1 {{ margin: 0 0 6px; font-size: 26px; }}
+    .intro {{ color: #667085; margin-bottom: 18px; }}
+    .card {{ background: #fff; border: 1px solid #d9e0ea; border-radius: 10px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }}
+    h2 {{ margin: 0 0 4px; font-size: 20px; }}
+    .meta {{ color: #667085; font-size: 13px; margin-bottom: 10px; }}
+    .summary {{ border-top: 1px solid #edf1f7; margin-top: 10px; padding-top: 10px; line-height: 1.7; }}
+    .empty {{ padding: 42px 16px; background: #f8fafc; border: 1px dashed #c8d2e1; border-radius: 8px; color: #667085; }}
+    svg {{ width: 100%; height: auto; border: 1px solid #edf1f7; border-radius: 8px; }}
+  </style>
+</head>
+<body>
+  <h1>K线异动标注</h1>
+  <div class=\"intro\">生成时间：{html_cell(generated_at)}。蓝色虚线标注本次用于复盘的异动日期；图表仅用于快速复盘，具体原因仍需看公告、新闻和原始数据。</div>
+  {''.join(cards)}
+</body>
+</html>
+"""
+    path.write_text(html_text, encoding="utf-8")
 
 
 def count_by(rows: list[dict[str, Any]], key: str) -> list[tuple[str, int]]:
@@ -1412,6 +1622,7 @@ def main() -> None:
     csv_path = args.output_dir / f"daily_monitor_{run_date}.csv"
     cause_path = args.output_dir / f"cause_check_{run_date}.csv"
     report_path = args.output_dir / f"daily_report_{run_date}.md"
+    kline_path = args.output_dir / f"kline_annotations_{run_date}.html"
     cause_checks = build_cause_checks(
         rows,
         stocks_by_code,
@@ -1421,9 +1632,11 @@ def main() -> None:
     write_csv(rows, csv_path)
     write_cause_checks(cause_checks, cause_path)
     write_report(rows, cause_checks, report_path, generated_at)
+    write_kline_annotations(rows, stocks_by_code, cause_checks, kline_path)
     print(f"CSV: {csv_path}")
     print(f"CAUSE_CHECK: {cause_path}")
     print(f"REPORT: {report_path}")
+    print(f"KLINE_ANNOTATIONS: {kline_path}")
 
 
 if __name__ == "__main__":

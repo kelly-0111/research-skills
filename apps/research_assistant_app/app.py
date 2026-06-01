@@ -214,7 +214,10 @@ def to_float(value: Any) -> float | None:
     try:
         if value in {"", None, "nan", "NaN"}:
             return None
-        return float(value)
+        parsed = float(value)
+        if math.isnan(parsed):
+            return None
+        return parsed
     except (TypeError, ValueError):
         return None
 
@@ -644,6 +647,10 @@ def run_stock_monitor(fields: dict[str, Any]) -> dict[str, Any]:
     stock_monitor.write_csv(rows, out_dir / f"daily_monitor_{run_date}.csv")
     stock_monitor.write_cause_checks(cause_checks, out_dir / f"cause_check_{run_date}.csv")
     stock_monitor.write_report(rows, cause_checks, report_path, generated_at)
+    if fields.get("include_kline_chart") == "true":
+        chart_path = out_dir / f"kline_annotations_{run_date}.html"
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            stock_monitor.write_kline_annotations(rows, stocks_by_code, cause_checks, chart_path)
 
     abnormal_count = sum(1 for row in rows if row.get("is_abnormal") == "是")
     return {
