@@ -431,9 +431,10 @@ def adaptive_column_widths(rows: list[list[Any]]) -> list[float]:
     max_cols = max((len(row) for row in rows), default=1)
     widths: list[float] = []
     long_text_headers = {
-        "最新进展", "下一里程碑", "竞争格局", "风险点", "来源", "核验说明",
+        "最新进展", "下一里程碑", "来源", "核验说明",
         "事件内容", "预期影响", "BD交易金额", "股权/期权/分成条款", "覆盖适应症",
-        "待核验事项", "建议来源", "代表管线",
+        "待核验事项", "建议来源", "代表管线", "来源类型/具体来源", "source_note",
+        "最新进展/下一节点", "来源/核验",
     }
     medium_text_headers = {"BD交易金额/结构", "交易类型/关键日期", "最新进展/下一节点", "来源/核验", "覆盖适应症"}
     compact_headers = {"公司名称", "治疗领域", "靶点", "项目编号", "药物类型", "研发阶段", "最高研发阶段", "置信度"}
@@ -445,7 +446,7 @@ def adaptive_column_widths(rows: list[list[Any]]) -> list[float]:
         if header in medium_text_headers:
             width = min(max(raw * 0.62 + 2, 16), 32)
         elif header in long_text_headers or raw > 50:
-            width = min(max(raw * 0.72 + 2, 18), 42)
+            width = min(max(raw * 0.72 + 2, 20), 58)
         elif header in compact_headers:
             width = min(max(raw * 0.95 + 2, 10), 18)
         else:
@@ -465,12 +466,27 @@ def estimated_row_height(row: list[Any], widths: list[float], is_header: bool = 
         width_chars = max(int((widths[idx] if idx < len(widths) else 14) * 1.3), 8)
         text_lines = text.count("\n") + 1
         wrapped = max(1, math.ceil(excel_display_width(text) / width_chars))
-        max_lines = max(max_lines, min(max(text_lines, wrapped), 6))
-    return min(18.0 * max_lines, 108.0)
+        line_cap = 14 if excel_display_width(text) > 90 else 8
+        max_lines = max(max_lines, min(max(text_lines, wrapped), line_cap))
+    return min(18.0 * max_lines, 252.0)
 
 
-def worksheet_xml(rows: list[list[Any]], freeze_header: bool = True) -> str:
+def bold_column_indexes(rows: list[list[Any]], sheet_name: str) -> set[int]:
+    if sheet_name != "催化剂追踪":
+        return set()
+    header_idx = sheet_header_row_index(rows) - 1
+    if header_idx >= len(rows):
+        return set()
+    return {
+        idx
+        for idx, header in enumerate(rows[header_idx])
+        if str(header or "") in {"药物/管线", "药物/项目编号"}
+    }
+
+
+def worksheet_xml(rows: list[list[Any]], sheet_name: str = "", freeze_header: bool = True) -> str:
     stage_cols = stage_column_indexes(rows)
+    bold_cols = bold_column_indexes(rows, sheet_name)
     header_row = sheet_header_row_index(rows)
     widths = adaptive_column_widths(rows)
     max_cols = max((len(row) for row in rows), default=1)
@@ -493,7 +509,12 @@ def worksheet_xml(rows: list[list[Any]], freeze_header: bool = True) -> str:
             elif row_idx == header_row:
                 style_id = 1
             else:
-                style_id = stage_style_id(value) if (col_idx - 1) in stage_cols else 0
+                if (col_idx - 1) in stage_cols:
+                    style_id = stage_style_id(value)
+                elif (col_idx - 1) in bold_cols and text:
+                    style_id = 10
+                else:
+                    style_id = 0
             style = f' s="{style_id}"' if style_id else ""
             cells.append(
                 f'<c r="{ref}" t="inlineStr"{style}><is><t>{xml_escape(text)}</t></is></c>'
@@ -611,7 +632,7 @@ def write_xlsx(path: Path, sheets: list[tuple[str, list[list[Any]]]]) -> None:
         '</fills>'
         '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        '<cellXfs count="10">'
+        '<cellXfs count="11">'
         '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>'
         '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment wrapText="1" horizontal="center" vertical="center"/></xf>'
         '<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment wrapText="1" vertical="top"/></xf>'
@@ -622,6 +643,7 @@ def write_xlsx(path: Path, sheets: list[tuple[str, list[list[Any]]]]) -> None:
         '<xf numFmtId="0" fontId="2" fillId="8" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment wrapText="1" vertical="top"/></xf>'
         '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment wrapText="1" vertical="center"/></xf>'
         '<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment wrapText="1" vertical="center"/></xf>'
+        '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment wrapText="1" vertical="top"/></xf>'
         '</cellXfs>'
         '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
         '<dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>'
@@ -634,8 +656,8 @@ def write_xlsx(path: Path, sheets: list[tuple[str, list[list[Any]]]]) -> None:
         zf.writestr("xl/workbook.xml", workbook_xml)
         zf.writestr("xl/_rels/workbook.xml.rels", workbook_rels_xml)
         zf.writestr("xl/styles.xml", styles_xml)
-        for idx, (_name, rows) in enumerate(safe_sheets, start=1):
-            zf.writestr(f"xl/worksheets/sheet{idx}.xml", worksheet_xml(rows))
+        for idx, (name, rows) in enumerate(safe_sheets, start=1):
+            zf.writestr(f"xl/worksheets/sheet{idx}.xml", worksheet_xml(rows, name))
 
 
 def split_drug_project(value: str) -> tuple[str, str]:
@@ -2259,8 +2281,8 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
 
     detail = [[
         "公司名称", "靶点", "药物/项目编号", "药物类型", "适应症", "研发阶段", "最新进展",
-        "进展时间", "下一里程碑", "下一里程碑时间", "竞争格局", "风险点",
-        "update_needed", "置信度", "来源类型/具体来源", "source_note"
+        "进展时间", "下一里程碑", "下一里程碑时间", "update_needed", "置信度",
+        "来源类型/具体来源", "source_note"
     ]]
     for row in pipeline_rows:
         confidence = row.get("source_confidence", "")
@@ -2276,14 +2298,11 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             row.get("progress_date", ""),
             row.get("next_catalyst", ""),
             row.get("next_catalyst_date_or_window", ""),
-            row.get("competitive_landscape", ""),
-            row.get("risks", ""),
             update_needed,
             confidence,
             source_brief(row.get("source", "")),
             row.get("verification_notes", ""),
         ])
-    detail = prune_low_signal_columns(detail, {"竞争格局", "风险点"})
     grouped_detail = group_detail_table(detail)
 
     stage_counts: dict[str, dict[str, Any]] = {}
@@ -2356,7 +2375,7 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             row.get("company_name", ""),
             row.get("drug_or_pipeline", ""),
             row.get("catalyst_type", ""),
-            report_event_summary(row, 110),
+            row.get("event_summary", ""),
             row.get("status", ""),
             row.get("result", ""),
             row.get("expected_impact", ""),

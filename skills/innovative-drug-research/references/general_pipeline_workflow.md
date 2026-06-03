@@ -260,7 +260,8 @@ Data-source split:
 Progress and event text policy:
 
 - Main sheets should contain concise research summaries, not long copied paragraphs.
-- `最新进展`, `事件内容`, and `最新进展/下一节点` should be reduced to one or two high-signal sentences with date, stage, milestone, BD, approval, enrollment, or data-readout facts.
+- `最新进展` and `最新进展/下一节点` should be reduced to one or two high-signal sentences with date, stage, milestone, BD, approval, enrollment, or data-readout facts.
+- In `催化剂追踪`, keep `事件内容` complete enough for direct reading in Excel; do not truncate it merely to fit a short cell.
 - Put full source titles, links/source IDs, file paths, and original excerpts in `附件索引`.
 - Main-sheet source columns should point readers to `附件索引` instead of repeating full report text.
 
@@ -268,7 +269,8 @@ Detail ordering and grouping:
 
 - Sort `靶点-适应症明细` by `公司名称 -> 靶点 -> 药物/项目编号 -> 适应症`.
 - Insert a blank row between groups keyed by `公司名称 + 靶点 + 药物/项目编号`.
-- If `竞争格局` or `风险点` is empty, `待确认`, or identical across all rows, omit that column from the final workbook. Keep it only when it differentiates rows.
+- Omit `竞争格局` and `风险点` from the final workbook unless a later workflow has real differentiated, source-backed content for them. Do not keep generic placeholder columns.
+- In `催化剂追踪`, apply bold text to the `药物/管线` column and use wrapped text with expanded row heights for long event/date/progress cells so researchers do not need to double-click each cell.
 
 Formatting rules:
 
@@ -328,7 +330,7 @@ Required structure:
 Writing rules:
 
 - Do not paste AlphaPai/raw retrieval paragraphs into the report body.
-- Use one or two concise research sentences for `最新进展` and `事件内容`.
+- Use one or two concise research sentences for `最新进展`; keep `催化剂追踪.事件内容` sufficiently complete and readable in the cell.
 - For AlphaPai leads, write concise research summaries and point to `附件索引`; do not overstate them as untrustworthy. Use `待来源复核` only when the source type is unsupported, automatically summarized, or contradicted.
 - Put full source titles, source IDs/links, file paths, and original excerpts in `附件索引`.
 - A conclusion must be tagged by type: confirmed fact, medium-confidence fact, inference, or verification lead.
