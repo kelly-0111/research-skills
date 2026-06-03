@@ -200,6 +200,30 @@ def output_files(folder: Path) -> list[dict[str, str]]:
     return files
 
 
+def output_bundle(folder: Path) -> dict[str, str]:
+    return {"name": f"{folder.name}.zip", "url": f"/download-zip/{folder.name}"}
+
+
+def output_folder_for_run(run_id: str) -> Path | None:
+    if not re.match(r"^[A-Za-z0-9_\-]+$", run_id or ""):
+        return None
+    folder = (OUTPUT_DIR / run_id).resolve()
+    try:
+        folder.relative_to(OUTPUT_DIR.resolve())
+    except ValueError:
+        return None
+    return folder if folder.exists() and folder.is_dir() else None
+
+
+def build_output_zip(folder: Path) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(folder.iterdir()):
+            if path.is_file():
+                zf.write(path, arcname=path.name)
+    return buffer.getvalue()
+
+
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
@@ -2989,6 +3013,7 @@ def run_stock_monitor(fields: dict[str, Any]) -> dict[str, Any]:
     return {
         "summary": f"已监控 {len(rows)} 只股票，发现 {abnormal_count} 条异动。",
         "files": output_files(out_dir),
+        "bundle": output_bundle(out_dir),
         "preview": build_stock_preview(rows, cause_checks, report_path),
     }
 
@@ -3031,6 +3056,7 @@ def run_analyst_profiler(fields: dict[str, Any]) -> dict[str, Any]:
     return {
         "summary": f"已处理 {len(enriched)} 条观点，生成 {len(scorecards)} 个研究员/团队画像。",
         "files": output_files(out_dir),
+        "bundle": output_bundle(out_dir),
         "preview": build_analyst_preview(enriched, scorecards, report_path),
     }
 
@@ -3112,6 +3138,7 @@ def run_drug_research(fields: dict[str, Any]) -> dict[str, Any]:
     return {
         "summary": f"已识别 {len(parsed)} 条公司列表记录，并生成结构化表和分析报告。{alpha_summary}",
         "files": output_files(out_dir),
+        "bundle": output_bundle(out_dir),
         "preview": build_drug_preview(out_dir),
     }
 
@@ -3164,12 +3191,25 @@ class ResearchHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"companies": load_drug_company_pool()})
             return
 
+        if path.startswith("/download-zip/"):
+            parts = path.split("/")
+            if len(parts) == 3:
+                run_id = parts[2]
+                folder = output_folder_for_run(run_id)
+                if folder:
+                    headers = {"Content-Disposition": f'attachment; filename="{folder.name}.zip"'}
+                    self.send_bytes(200, build_output_zip(folder), "application/zip", headers)
+                    return
+            self.send_bytes(404, "打包文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
+            return
+
         if path.startswith("/download/"):
             parts = path.split("/")
             if len(parts) == 4:
                 run_id, filename = parts[2], parts[3]
-                file_path = OUTPUT_DIR / run_id / filename
-                if file_path.exists() and file_path.is_file():
+                folder = output_folder_for_run(run_id)
+                file_path = (folder / filename).resolve() if folder else None
+                if file_path and file_path.exists() and file_path.is_file() and folder and folder in file_path.parents:
                     self.send_download(file_path)
                     return
             self.send_bytes(404, "文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
