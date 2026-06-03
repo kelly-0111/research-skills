@@ -43,6 +43,8 @@
     .err { color: var(--red); white-space: pre-wrap; font-size: 12px; }
     .files { display: flex; flex-direction: column; gap: 6px; }
     .files a { color: var(--blue); text-decoration: none; }
+    .file-actions { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .download-action { color: var(--muted) !important; font-size: 12px; }
     .bundle-link { background: var(--blue) !important; color: #fff !important; }
     .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .tab-btn { min-height: 38px !important; background: #eef2ff; color: #1d4ed8; }
@@ -197,7 +199,10 @@
 
     function renderFileLinks(files) {
       return (files || []).map(file => (
-        `<a href="${escapeHtml(file.url)}">${escapeHtml(file.name)}</a>`
+        `<span class="file-actions">` +
+        `<a href="${escapeHtml(file.preview_url || file.url)}" target="_blank">${escapeHtml(file.name)}</a>` +
+        (file.preview_url ? `<a class="download-action" href="${escapeHtml(file.url)}">下载</a>` : '') +
+        `</span>`
       )).join('');
     }
 

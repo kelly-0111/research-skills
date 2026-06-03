@@ -19,6 +19,7 @@ import traceback
 import webbrowser
 import zipfile
 from datetime import datetime
+from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -180,6 +181,60 @@ def xlsx_to_csv_text(path: Path) -> str:
     return buf.getvalue()
 
 
+def xlsx_sheet_rows(path: Path, max_rows: int = 500) -> list[tuple[str, list[list[str]]]]:
+    """Read worksheet values from a simple .xlsx file using only stdlib."""
+    ns = {
+        "a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    }
+    with zipfile.ZipFile(path) as zf:
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in zf.namelist():
+            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+            for si in root.findall("a:si", ns):
+                texts = [node.text or "" for node in si.findall(".//a:t", ns)]
+                shared.append("".join(texts))
+
+        workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+        rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+        rel_targets = {rel.attrib.get("Id", ""): rel.attrib.get("Target", "") for rel in rels}
+        sheets: list[tuple[str, list[list[str]]]] = []
+        for sheet_info in workbook.findall("a:sheets/a:sheet", ns):
+            sheet_name = sheet_info.attrib.get("name", "Sheet")
+            rel_id = sheet_info.attrib.get(f"{{{ns['r']}}}id", "")
+            target = rel_targets.get(rel_id, "")
+            sheet_path = "xl/" + target.lstrip("/")
+            if sheet_path not in zf.namelist():
+                continue
+            sheet = ET.fromstring(zf.read(sheet_path))
+            rows: list[list[str]] = []
+            for row in sheet.findall(".//a:sheetData/a:row", ns)[:max_rows]:
+                values: list[str] = []
+                last_col = 0
+                for cell in row.findall("a:c", ns):
+                    ref = cell.attrib.get("r", "")
+                    col_letters = "".join(ch for ch in ref if ch.isalpha())
+                    col_index = 0
+                    for ch in col_letters:
+                        col_index = col_index * 26 + (ord(ch.upper()) - ord("A") + 1)
+                    while last_col + 1 < col_index:
+                        values.append("")
+                        last_col += 1
+                    raw = cell.findtext("a:v", default="", namespaces=ns)
+                    if cell.attrib.get("t") == "s" and raw:
+                        value = shared[int(raw)]
+                    elif cell.attrib.get("t") == "inlineStr":
+                        texts = [node.text or "" for node in cell.findall(".//a:t", ns)]
+                        value = "".join(texts)
+                    else:
+                        value = raw
+                    values.append(value)
+                    last_col = col_index
+                rows.append(values)
+            sheets.append((sheet_name, rows))
+    return sheets
+
+
 def read_tabular_upload(path: Path) -> str:
     if path.suffix.lower() == ".xlsx":
         return xlsx_to_csv_text(path)
@@ -196,7 +251,10 @@ def output_files(folder: Path) -> list[dict[str, str]]:
     files = []
     for path in sorted(folder.iterdir()):
         if path.is_file():
-            files.append({"name": path.name, "url": f"/download/{folder.name}/{path.name}"})
+            item = {"name": path.name, "url": f"/download/{folder.name}/{path.name}"}
+            if path.suffix.lower() in {".xlsx", ".csv", ".md", ".txt", ".html"}:
+                item["preview_url"] = f"/preview/{folder.name}/{path.name}"
+            files.append(item)
     return files
 
 
@@ -222,6 +280,72 @@ def build_output_zip(folder: Path) -> bytes:
             if path.is_file():
                 zf.write(path, arcname=path.name)
     return buffer.getvalue()
+
+
+def html_table(rows: list[list[str]]) -> str:
+    if not rows:
+        return '<div class="empty">暂无数据</div>'
+    max_cols = max((len(row) for row in rows), default=1)
+    body = []
+    for row_idx, row in enumerate(rows):
+        tag = "th" if row_idx == 0 else "td"
+        cells = []
+        for col_idx in range(max_cols):
+            value = row[col_idx] if col_idx < len(row) else ""
+            cells.append(f"<{tag}>{html_escape(str(value))}</{tag}>")
+        body.append(f"<tr>{''.join(cells)}</tr>")
+    return f"<table>{''.join(body)}</table>"
+
+
+def render_file_preview(path: Path) -> bytes:
+    suffix = path.suffix.lower()
+    title = html_escape(path.name)
+    download_url = "#"
+    if path.parent.parent == OUTPUT_DIR:
+        download_url = f"/download/{path.parent.name}/{path.name}"
+    style = """
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18202f;background:#f6f7f9}
+    header{position:sticky;top:0;z-index:2;display:flex;gap:12px;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid #d9dee7}
+    h1{font-size:16px;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    a{color:#2563eb;text-decoration:none;font-weight:650}
+    main{padding:16px}
+    .sheet{margin:0 0 18px;background:#fff;border:1px solid #d9dee7;border-radius:8px;overflow:hidden}
+    .sheet h2{font-size:14px;margin:0;padding:10px 12px;background:#fbfcfe;border-bottom:1px solid #d9dee7}
+    .table-wrap{overflow:auto;max-height:78vh}
+    table{border-collapse:collapse;width:max-content;min-width:100%;font-size:13px}
+    th,td{border:1px solid #e5e7eb;padding:7px 9px;vertical-align:top;max-width:520px;white-space:pre-wrap;word-break:break-word}
+    th{position:sticky;top:0;background:#1f5a95;color:#fff;z-index:1}
+    pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid #d9dee7;border-radius:8px;padding:14px;line-height:1.55}
+    .empty{padding:14px;color:#667085}
+    """
+    if suffix == ".xlsx":
+        sections = []
+        for sheet_name, rows in xlsx_sheet_rows(path):
+            sections.append(
+                '<section class="sheet">'
+                f"<h2>{html_escape(sheet_name)}</h2>"
+                f'<div class="table-wrap">{html_table(rows)}</div>'
+                "</section>"
+            )
+        content = "".join(sections) or '<div class="empty">Excel 文件没有可预览工作表。</div>'
+    elif suffix == ".csv":
+        with path.open("r", encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.reader(f))[:500]
+        content = f'<section class="sheet"><div class="table-wrap">{html_table(rows)}</div></section>'
+    elif suffix in {".md", ".txt"}:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        content = f"<pre>{html_escape(text)}</pre>"
+    elif suffix == ".html":
+        content = path.read_text(encoding="utf-8-sig", errors="replace")
+    else:
+        content = '<div class="empty">该文件类型暂不支持网页预览，请下载查看。</div>'
+    html = (
+        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+        f"<title>{title}</title><style>{style}</style></head><body>"
+        f"<header><h1>{title}</h1><a href=\"{html_escape(download_url)}\">下载原文件</a></header>"
+        f"<main>{content}</main></body></html>"
+    )
+    return html.encode("utf-8")
 
 
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -3201,6 +3325,18 @@ class ResearchHandler(BaseHTTPRequestHandler):
                     self.send_bytes(200, build_output_zip(folder), "application/zip", headers)
                     return
             self.send_bytes(404, "打包文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
+            return
+
+        if path.startswith("/preview/"):
+            parts = path.split("/")
+            if len(parts) == 4:
+                run_id, filename = parts[2], parts[3]
+                folder = output_folder_for_run(run_id)
+                file_path = (folder / filename).resolve() if folder else None
+                if file_path and file_path.exists() and file_path.is_file() and folder and folder in file_path.parents:
+                    self.send_bytes(200, render_file_preview(file_path), "text/html; charset=utf-8")
+                    return
+            self.send_bytes(404, "预览文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
             return
 
         if path.startswith("/download/"):
