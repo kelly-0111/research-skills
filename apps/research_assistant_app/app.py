@@ -2903,135 +2903,116 @@ def write_innovative_drug_analysis(out_dir: Path, source_name: str) -> None:
             lines.append(f"- BD/出海线索：{bd_assets} 已识别合作或里程碑信息，但金额、权益区域和适应症覆盖必须回到公告/年报核验。")
         lines.append("- 当前报告不能直接作为投资结论：还缺少行情数据、指数相对收益、成交额、收入利润模型和竞品对比。")
 
-    lines.extend(["", "## 二、重点观察公司", ""])
-    lines.append("| 优先级 | 公司 | 跟踪定位 | 核心资产 | 近期催化剂 | 待核验重点 |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
-    for score, company, reasons, _row in watchlist[:12]:
-        priority = "高" if score >= 4 else "中" if score >= 2 else "待补充"
-        pipelines = pipeline_by_company.get(company, [])
-        catalysts = catalyst_by_company.get(company, [])
-        pipeline_text = "；".join(dict.fromkeys(
-            f"{item.get('drug_or_pipeline', '')}({item.get('target', '')})" for item in pipelines[:4]
-        ))
-        catalyst_text = "；".join(dict.fromkeys(
-            report_event_summary(item, 70) for item in catalysts[:2]
-        ))
-        position = "商业化/BD/中后期管线跟踪" if pipelines else "待补管线底稿"
-        check = "核验阶段、权益归属、BD条款、收入贡献"
-        lines.append(
-            f"| {priority} | {md_cell(company)} | {md_cell(position)} | {md_cell(pipeline_text)} | {md_cell(catalyst_text, 110)} | {check} |"
-        )
-
-    lines.extend(["", "## 三、核心资产底稿（药物 × 靶点 × 适应症 × 阶段）", ""])
-    lines.append("| 公司 | 药物/项目 | 靶点 | 技术路线 | 适应症 | 当前阶段 | 最新进展摘要 | 来源可信度 | 待核验 |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-    for row in pipeline_rows[:30]:
-        confidence = row.get("source_confidence", "") or "待确认"
-        needs_check = "是" if confidence == "低" or row.get("clinical_stage", "") in {"", "待确认"} else "待复核"
-        lines.append(
-            "| "
-            + " | ".join([
-                md_cell(row.get("company_name", ""), 24),
-                md_cell(row.get("drug_or_pipeline", ""), 36),
-                md_cell(row.get("target", ""), 24),
-                md_cell(row.get("modality", ""), 18),
-                md_cell(row.get("indication", ""), 36),
-                md_cell(row.get("clinical_stage", ""), 18),
-                md_cell(report_progress_summary(row, 90), 110),
-                md_cell(confidence, 12),
-                needs_check,
+    lines.extend(["", "## 二、重点观察对象", ""])
+    if watchlist:
+        lines.append("本轮不建议在 Markdown 里重复铺开全部底表。重点应放在“哪些公司/资产值得先看、为什么、下一步查什么”。完整字段请看 Excel：`汇总`、`靶点全景总览`、`靶点-适应症明细`、`催化剂追踪`。")
+        for score, company, reasons, _row in watchlist[:6]:
+            pipelines = pipeline_by_company.get(company, [])
+            catalysts = catalyst_by_company.get(company, [])
+            pipeline_text = "；".join(dict.fromkeys(
+                f"{item.get('drug_or_pipeline', '')}({item.get('target', '')})" for item in pipelines[:4]
+            )) or "待补管线底稿"
+            catalyst_text = "；".join(dict.fromkeys(
+                report_event_summary(item, 90) for item in catalysts[:2]
+            )) or "待补催化剂"
+            priority = "高" if score >= 4 else "中" if score >= 2 else "待补充"
+            lines.extend([
+                "",
+                f"**{company}：{priority}优先级**",
+                f"- 跟踪定位：{'、'.join(reasons) if reasons else '待补充公司资料'}。",
+                f"- 代表资产：{pipeline_text}。",
+                f"- 近期看点：{catalyst_text}。",
+                "- 下一步：核验阶段口径、权益归属、BD条款、收入贡献和行情验证。",
             ])
-            + " |"
-        )
-    if len(pipeline_rows) > 30:
-        lines.append(f"| ... | ... | ... | ... | ... | ... | 其余 {len(pipeline_rows) - 30} 条详见 Excel 明细表 | ... | ... |")
+    else:
+        lines.append("暂无可排序观察对象，需先补公司池和来源索引。")
 
-    lines.extend(["", "## 四、BD / 出海交易标准表", ""])
-    lines.append("| 公司 | 项目 | 靶点 | 合作方 | 授权区域 | 首付款/里程碑/权益 | 覆盖适应症 | 公告日期 | 来源可信度 | 待核验重点 |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-    if bd_rows:
-        for row in bd_rows[:20]:
-            terms = combine_deal_value(row) or "待确认"
+    lines.extend(["", "## 三、资产和催化剂判断", ""])
+    lines.append("Markdown 只保留资产层面的判断，不再展开 `药物 × 靶点 × 适应症 × 阶段` 全量表。完整拆行请看 Excel `靶点-适应症明细`；阶段分布请看 `阶段分布统计`；催化剂时间线请看 `催化剂追踪`。")
+    if project_rows:
+        top_projects = project_rows[:8]
+        for item in top_projects:
+            stage = choose_highest_stage(item.get("stages", []))
+            indications = "、".join(item.get("indications", [])[:4]) or "待细分适应症"
+            progress = concise_research_text("；".join(item.get("progress", [])), 120)
+            confidence = choose_highest_confidence(item.get("confidence", [])) if item.get("confidence") else "待确认"
             lines.append(
-                "| "
-                + " | ".join([
-                    md_cell(row.get("company_name", ""), 24),
-                    md_cell(row.get("drug_or_pipeline", ""), 34),
-                    md_cell(row.get("target", ""), 24),
-                    md_cell(row.get("partner", ""), 28),
-                    md_cell(row.get("territory", ""), 28),
-                    md_cell(terms, 60),
-                    md_cell(join_unique_segments(row.get("covered_indications", "")), 50),
-                    md_cell(row.get("announcement_date", ""), 18),
-                    md_cell(row.get("source_confidence", ""), 12),
-                    "核验公告原文、权益区域、金额口径和适应症覆盖",
-                ])
-                + " |"
+                f"- **{item['company_name']} - {item['drug_or_pipeline']}（{item['target']}）**："
+                f"{stage}；覆盖 {indications}；{progress or '最新进展待补'}；来源可信度 {confidence}。"
             )
     else:
-        lines.append("| 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 补公告/年报/授权协议摘要 |")
+        lines.append("- 暂无资产级事实，不能形成管线判断。")
 
-    lines.extend(["", "## 五、收入利润假设模板（CM310 优先）", ""])
-    lines.append("| 公司 | 产品 | 适应症 | 是否医保 | 患者池 | 渗透率 | 年治疗费用 | 峰值销售额 | 2026E | 2027E | 2028E | 毛利率 | 销售费用率 | 利润贡献 |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-    for row in cm310_revenue_template_rows(company_rows, pipeline_rows)[1:]:
-        lines.append(
-            "| "
-            + " | ".join(md_cell(cell, 40) for cell in [
-                row[0], row[1], row[2], row[3], row[4], row[6], row[7], row[8],
-                row[9], row[10], row[11], row[12], row[13], row[14],
-            ])
-            + " |"
-        )
+    if catalyst_rows:
+        lines.extend(["", "**近期催化剂摘要**"])
+        for row in catalyst_rows[:8]:
+            lines.append(
+                f"- {row.get('date_or_window','待确认')}｜{row.get('company_name','')}-"
+                f"{row.get('drug_or_pipeline','')}：{report_event_summary(row, 140)}"
+            )
+    else:
+        lines.append("- 暂无明确催化剂线索。")
 
-    lines.extend(["", "## 六、股价上涨逻辑验证框架", ""])
-    lines.append("| 逻辑模块 | 当前状态 | 已有线索 | 下一步需要的数据 | 判断方法 |")
-    lines.append("| --- | --- | --- | --- | --- |")
+    lines.extend(["", "## 四、BD / 出海判断", ""])
+    if bd_rows:
+        lines.append("BD 不适合只看“有没有合作”，需要拆到项目、合作方、区域、金额、权益和触发条件。完整交易拆行请看 Excel `BD合作一览`。")
+        for row in bd_rows[:8]:
+            terms = combine_deal_value(row) or "金额待确认"
+            lines.append(
+                f"- **{row.get('company_name','')} - {row.get('drug_or_pipeline','')}**："
+                f"合作方 {row.get('partner','待确认')}；{terms}；区域 {row.get('territory','待确认')}；"
+                f"公告/进展日期 {row.get('announcement_date','待确认')}。"
+            )
+    else:
+        lines.append("当前没有抽到可用 BD 交易行。下一步优先查公告、年报、授权协议摘要和高质量研报。")
+
+    lines.extend(["", "## 五、收入利润和商业化", ""])
+    lines.append("收入利润部分不在 Markdown 中铺空表。Excel `收入利润假设` 已保留 CM310 等商业化品种的假设模板；Markdown 只记录建模口径。")
+    if commercial_projects:
+        commercial_text = "、".join(dict.fromkeys(f"{row['company_name']}-{row['drug_or_pipeline']}" for row in commercial_projects[:6]))
+        lines.append(f"- 优先建模资产：{commercial_text}。")
+    lines.extend([
+        "- 必补字段：医保状态、患者池、可治疗比例、渗透率、年治疗费用、峰值销售额、2026E/2027E/2028E 收入、毛利率、销售费用率和利润贡献。",
+        "- 建模原则：不要把券商假设直接当事实；可先作为情景参数，再用公司披露销售、医保执行和渠道覆盖数据校准。",
+    ])
+
+    lines.extend(["", "## 六、股价上涨逻辑验证", ""])
+    lines.append("上涨逻辑不能只由管线新闻推出，必须叠加行情和时间线。Excel `行情验证` 已保留 1/5/20/60 日涨跌幅、成交额和相对指数收益字段。")
+    lines.append("| 逻辑模块 | 当前状态 | 下一步需要的数据 | 判断方法 |")
+    lines.append("| --- | --- | --- | --- |")
     event_evidence = "；".join(dict.fromkeys(
         f"{row.get('company_name','')}-{row.get('drug_or_pipeline','')}: {report_event_summary(row, 60)}"
         for row in catalyst_rows[:4]
     )) or "暂缺明确催化剂"
     narrative_evidence = "；".join(f"{name}({count})" for name, count in modality_counts[:5]) or "待补充"
     disease_evidence = "；".join(f"{name}({count})" for name, count in disease_counts[:5]) or "待补充"
-    lines.append(f"| 事件催化 | 待验证 | {md_cell(event_evidence, 150)} | 公告/会议/临床登记日期、催化剂完成状态 | 看股价是事件前预期、同步反应，还是兑现后回落 |")
-    lines.append(f"| 叙事变化 | 待验证 | 技术路线：{md_cell(narrative_evidence, 90)}；适应症：{md_cell(disease_evidence, 90)} | 当期市场主线、同类公司涨跌、研报标题变化 | 判断是否为板块叙事扩散而非单一公司基本面 |")
-    lines.append("| 业绩兑现 | 待核验 | 商业化/医保/收入线索需要单独拆表 | 销售额、医保后放量、费用率、利润率 | 与收入利润假设表联动 |")
-    lines.append("| 资金行为 | 当前无行情证据 | 暂不能判断 | 1/5/20/60日涨跌幅、成交额、换手率、相对恒生医疗/创新药指数收益 | 判断是否放量、是否跑赢板块、是否利好兑现 |")
+    lines.append(f"| 事件催化 | 待验证；已有线索：{md_cell(event_evidence, 110)} | 公告/会议/临床登记日期、催化剂完成状态 | 看股价是事件前预期、同步反应，还是兑现后回落 |")
+    lines.append(f"| 叙事变化 | 待验证；技术路线：{md_cell(narrative_evidence, 70)}；适应症：{md_cell(disease_evidence, 70)} | 当期市场主线、同类公司涨跌、研报标题变化 | 判断是否为板块叙事扩散而非单一公司基本面 |")
+    lines.append("| 业绩兑现 | 待核验 | 销售额、医保后放量、费用率、利润率 | 与收入利润假设表联动 |")
+    lines.append("| 资金行为 | 待核验 | 1/5/20/60日涨跌幅、成交额、换手率、相对恒生医疗/创新药指数收益 | 判断是否放量、是否跑赢板块、是否利好兑现 |")
 
-    lines.extend(["", "### 行情验证表模板", ""])
-    lines.append("| 日期 | 公司 | 股价涨跌幅 | 成交额 | 相对指数收益 | 同日事件 | 判断 |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
-    for row in market_validation_template_rows(company_rows, catalyst_rows)[1:8]:
-        lines.append(
-            "| "
-            + " | ".join(md_cell(cell, 60) for cell in [row[0], row[1], row[2], row[3], row[4], row[5], row[6]])
-            + " |"
-        )
-
-    lines.extend(["", "## 七、事实 / 推断 / 待核验矩阵", ""])
-    lines.append("| 结论 | 类型 | 依据 | 核验动作 |")
-    lines.append("| --- | --- | --- | --- |")
-    for row in project_rows[:8]:
-        stage = choose_highest_stage(row.get("stages", []))
-        confidence = choose_highest_confidence(row.get("confidence", [])) if row.get("confidence") else "待确认"
-        conclusion_type = "已确认事实" if confidence == "高" else "中等可信事实" if confidence == "中" else "待核验线索"
-        lines.append(
-            f"| {md_cell(row['company_name'])}-{md_cell(row['drug_or_pipeline'])} 当前阶段为 {md_cell(stage, 20)} | "
-            f"{conclusion_type} | {md_cell(source_brief('；'.join(row.get('sources', []))), 80)} | 回看公告/年报/临床登记，确认阶段和适应症拆分 |"
-        )
-    lines.append("| 医药上涨逻辑成立 | 推断 | 当前缺少行情、成交额和指数相对收益 | 拉取行情数据并做事件时间线验证 |")
+    lines.extend(["", "## 七、事实、推断和待核验边界", ""])
+    high_count = sum(1 for row in pipeline_rows if row.get("source_confidence") == "高")
+    medium_count = sum(1 for row in pipeline_rows if row.get("source_confidence") == "中")
+    low_count = sum(1 for row in pipeline_rows if row.get("source_confidence") == "低")
+    lines.extend([
+        f"- 已确认/高可信事实：{high_count} 条。通常来自公告、年报、官方资料或高置信来源。",
+        f"- 中等可信事实：{medium_count} 条。通常来自研报、路演纪要或 AlphaPai 投研资料，需要和官方资料交叉。",
+        f"- 待核验线索：{low_count} 条。不得直接进入投资结论。",
+        "- 所有资产阶段、BD金额、权益区域和商业化假设，最终以 Excel `附件索引` 对应来源回溯。",
+    ])
 
     lines.extend(["", "## 八、优先待核验清单", ""])
-    lines.append("| 优先级 | 公司 | 待核验事项 | 为什么重要 | 建议来源 | 完成后更新字段 |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
-    for row in verification_rows[:10]:
-        lines.append(
-            f"| 高 | {md_cell(row.get('company_name',''))} | {md_cell(row.get('missing_item','管线事实/阶段/来源核验'))} | 防止阶段、权益或催化剂误判 | {md_cell(row.get('suggested_next_source','公告、官网管线页、临床登记、年报、券商深度'))} | pipeline_progress / bd_deal_tracker / verification_queue |"
-        )
-    if not verification_rows:
+    if verification_rows:
+        for row in verification_rows[:10]:
+            lines.append(
+                f"- **{row.get('company_name','')}**：{row.get('missing_item','管线事实/阶段/来源核验')}；"
+                f"建议来源：{row.get('suggested_next_source','公告、官网管线页、临床登记、年报、券商深度')}。"
+            )
+    else:
         for row in project_rows[:6]:
             lines.append(
-                f"| 中 | {md_cell(row['company_name'])} | 核验 {md_cell(row['drug_or_pipeline'])} 阶段、适应症和来源 | 影响估值、催化剂和收入假设 | 公告、官网管线页、临床登记、年报/半年报 | pipeline_progress |"
+                f"- **{row['company_name']} - {row['drug_or_pipeline']}**：核验阶段、适应症和来源；完成后更新 Excel `靶点-适应症明细`。"
             )
 
     lines.extend(["", "## 九、项目归属 / 交叉污染风险", ""])
