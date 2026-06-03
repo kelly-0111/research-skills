@@ -6,7 +6,7 @@
 
 测试输入：
 
-- `/Users/kelly.s/Downloads/创新药上市公司列表_A股与港股.md`
+- `examples/innovative_drug_structuring/创新药上市公司列表_A股与港股.md`
 
 测试输出：
 
@@ -176,4 +176,3 @@
 - 未来 3-12 个月催化剂
 - 主要竞品
 - 主要风险
-

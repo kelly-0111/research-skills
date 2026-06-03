@@ -12,6 +12,8 @@ Created: 2026-05-25
 | `innovative-drug-research` | 创新药投研助手 | 结构化创新药管线，并复盘医药股上涨逻辑、资金轮动、事件催化和风险信号 |
 | `analyst-profiler` | 卖方研究员画像 | 结构化卖方研报观点，区分快反型、深度型和持续跟踪价值 |
 
+AlphaPai 可作为数据入口接入：用 AlphaPai API 召回公告、研报、路演、社媒、表格和图片，本包负责登记来源、结构化、核验、追踪和生成交付物。API Key 只配置在本机 AlphaPai skill 中，不放入本仓库。
+
 ## 目录
 
 ```text
@@ -102,11 +104,19 @@ python3 skills/innovative-drug-research/scripts/build_pipeline_seed.py \
   --out-dir outputs/innovative_drug_research
 ```
 
+如果先维护了公司官网 IR 入口表，可生成官方来源 manifest：
+
+```bash
+python3 skills/innovative-drug-research/scripts/build_source_manifest_from_ir.py \
+  --ir-sources templates/company_ir_sources_template.csv \
+  --output outputs/innovative_drug_research/source_manifest_ir_seed.csv
+```
+
 使用 `skills/innovative-drug-research/` 中的三个子模块，既可以登记来源，也可以整理创新药靶点和进展，并分析医药股上涨逻辑：
 
 ```text
-资料接入：公告/官网管线页/年报/临床登记/会议摘要/研报
-管线结构化：公司/药物/靶点/阶段/进展/催化剂
+资料接入：AlphaPai召回、公告/官网管线页/年报/临床登记/会议摘要/研报
+管线结构化：公司/药物/靶点/阶段/进展/催化剂/BD交易
 上涨逻辑复盘：事件催化/资金轮动/行情阶段/风险信号
 ```
 
@@ -120,6 +130,18 @@ data/innovative_drug_sources/
 
 ```text
 templates/innovative_drug_source_manifest_template.csv
+templates/pipeline_progress_template.csv
+templates/bd_deal_tracker_template.csv
+templates/company_ir_sources_template.csv
+```
+
+优先维护每家公司的官网 IR 与新闻/媒体入口，例如财务报告、公告与通函、演示材料、IR 月报/周报、IR 日历、产品管线页、全球合作页、新闻中心、公司新闻列表和媒体报道；AlphaPai 用于补充召回和交叉检索，本地表格负责记录来源、时间和核验状态。
+
+如已安装 AlphaPai skill，可先配置并验证 API：
+
+```bash
+python ~/.codex/skills/alphapai-research/scripts/alphapai_client.py config --set-key YOUR_API_KEY
+python ~/.codex/skills/alphapai-research/scripts/alphapai_client.py hello
 ```
 
 ### 卖方研究员画像

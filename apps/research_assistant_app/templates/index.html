@@ -26,21 +26,39 @@
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-height: 520px; display: flex; flex-direction: column; gap: 0; }
     .card-head { min-height: 132px; display: flex; flex-direction: column; gap: 12px; }
     .card-form { height: 300px; display: flex; flex-direction: column; gap: 12px; }
+    .card[data-tool="drug"] .card-form { height: auto; min-height: 360px; }
     .button-row { margin-top: auto; }
     h2 { margin: 0; font-size: 17px; }
     p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
     label { font-size: 13px; font-weight: 600; }
-    input[type=file], select { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+    input[type=file], input[type=search], select { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
     .row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
     button, a.btn { border: 0; border-radius: 6px; background: var(--blue); color: #fff; padding: 10px 12px; cursor: pointer; text-decoration: none; text-align: center; font-weight: 600; font-size: 13px; }
     .card button { width: 100%; min-height: 46px; }
     button.secondary, a.secondary { background: #eef2ff; color: #1d4ed8; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     .result { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; font-size: 13px; }
+    .card[data-tool="drug"] .result { margin-top: 16px; }
     .ok { color: var(--green); font-weight: 600; margin-bottom: 8px; }
     .err { color: var(--red); white-space: pre-wrap; font-size: 12px; }
     .files { display: flex; flex-direction: column; gap: 6px; }
     .files a { color: var(--blue); text-decoration: none; }
+    .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tab-btn { min-height: 38px !important; background: #eef2ff; color: #1d4ed8; }
+    .tab-btn.active { background: var(--blue); color: #fff; }
+    .mode-panel { display: none; flex-direction: column; gap: 10px; min-height: 168px; }
+    .mode-panel.active { display: flex; }
+    .company-results { border: 1px solid var(--line); border-radius: 6px; height: 170px; overflow: auto; background: #fff; }
+    .company-item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border-top: 1px solid #eef0f4; cursor: pointer; }
+    .company-item:first-child { border-top: 0; }
+    .company-item input { margin-top: 2px; }
+    .company-name { font-weight: 700; font-size: 13px; color: var(--text); }
+    .company-meta { margin-top: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .selected-companies { display: flex; flex-wrap: wrap; gap: 6px; min-height: 32px; max-height: 70px; overflow: auto; align-items: flex-start; padding: 2px 0; }
+    .chip { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 5px 8px; font-size: 12px; font-weight: 650; }
+    .quiet-btn { border: 1px solid var(--line); background: #fff; color: var(--muted); min-height: 30px !important; padding: 6px 8px; }
+    .quick-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .drug-action-row { margin-top: 2px; }
     .preview-panel { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
     .preview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
     .preview-head h2 { font-size: 18px; }
@@ -120,13 +138,29 @@
       <section class="card" data-tool="drug">
         <div class="card-head">
           <h2>创新药分析</h2>
-          <p>上传 Markdown 公司列表，生成结构化表、上涨逻辑拆解、后续预测和待核验清单。</p>
+          <p>从内置创新药公司池搜索选择，或上传 Markdown 公司列表，生成结构化表、上涨逻辑拆解、后续预测和待核验清单。</p>
           <a class="btn secondary" href="/template/drug">下载公司列表模板</a>
         </div>
         <div class="card-form">
-          <label>公司列表 Markdown/TXT</label>
-          <input type="file" name="file" accept=".md,.txt,.csv">
-          <div class="button-row"><button onclick="runTool('drug')">生成分析报告</button></div>
+          <div class="mode-tabs">
+            <button class="tab-btn active" type="button" onclick="setDrugMode('search')">搜索公司池</button>
+            <button class="tab-btn" type="button" onclick="setDrugMode('upload')">上传列表</button>
+          </div>
+          <div class="mode-panel active" data-drug-mode="search">
+            <label>搜索公司</label>
+            <input type="search" name="company_search" placeholder="输入公司、代码、技术路线或适应症" oninput="renderDrugCompanyList()">
+            <div class="quick-row">
+              <button class="quiet-btn" type="button" onclick="selectMonthlyDrugFocus()">选择月度重点</button>
+              <button class="quiet-btn" type="button" onclick="clearDrugSelection()">清空选择</button>
+            </div>
+            <div class="company-results" id="drugCompanyResults"></div>
+            <div class="selected-companies" id="selectedDrugCompanies"></div>
+          </div>
+          <div class="mode-panel" data-drug-mode="upload">
+            <label>公司列表 Markdown/TXT</label>
+            <input type="file" name="file" accept=".md,.txt,.csv">
+          </div>
+          <div class="button-row drug-action-row"><button onclick="runTool('drug')">生成分析报告</button></div>
         </div>
         <div class="result"></div>
       </section>
@@ -141,6 +175,10 @@
   </main>
 
   <script>
+    let drugCompanyPool = [];
+    let selectedDrugCompanies = new Set();
+    let drugMode = 'search';
+
     function escapeHtml(value) {
       return String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -198,17 +236,128 @@
       `;
     }
 
+    function setDrugMode(mode) {
+      drugMode = mode;
+      document.querySelectorAll('[data-tool="drug"] .tab-btn').forEach((button, index) => {
+        button.classList.toggle('active', (mode === 'search' && index === 0) || (mode === 'upload' && index === 1));
+      });
+      document.querySelectorAll('[data-drug-mode]').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.drugMode === mode);
+      });
+    }
+
+    function companyMatches(company, query) {
+      if (!query) return true;
+      const haystack = [
+        company.company_name,
+        company.ticker,
+        company.market,
+        company.company_type,
+        company.core_fields_raw,
+        company.modality_tags,
+        company.disease_area_tags
+      ].join(' ').toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    }
+
+    function normalizeCompanyName(name) {
+      return String(name || '').replace(/[-－—]B/g, '').replace(/\s/g, '');
+    }
+
+    function renderSelectedDrugCompanies() {
+      const wrap = document.getElementById('selectedDrugCompanies');
+      const selected = [...selectedDrugCompanies];
+      wrap.innerHTML = selected.length
+        ? selected.map(name => `<span class="chip">${escapeHtml(name)}</span>`).join('')
+        : '<span class="company-meta">未选择公司</span>';
+    }
+
+    function renderDrugCompanyList() {
+      const input = document.querySelector('[data-tool="drug"] input[name=company_search]');
+      const query = input ? input.value.trim() : '';
+      const results = document.getElementById('drugCompanyResults');
+      const rows = drugCompanyPool.filter(company => companyMatches(company, query)).slice(0, 30);
+      if (!rows.length) {
+        results.innerHTML = '<div class="empty-preview">没有匹配公司。</div>';
+        renderSelectedDrugCompanies();
+        return;
+      }
+      results.innerHTML = rows.map(company => {
+        const name = company.company_name || '';
+        const checked = selectedDrugCompanies.has(name) ? 'checked' : '';
+        const meta = [company.ticker, company.market, company.company_type, company.core_fields_raw]
+          .filter(Boolean).join(' · ');
+        return `
+          <label class="company-item">
+            <input type="checkbox" ${checked} onchange='toggleDrugCompany(${escapeHtml(JSON.stringify(name))}, this.checked)'>
+            <span>
+              <span class="company-name">${escapeHtml(name)}</span>
+              <span class="company-meta">${escapeHtml(meta)}</span>
+            </span>
+          </label>
+        `;
+      }).join('');
+      renderSelectedDrugCompanies();
+    }
+
+    function toggleDrugCompany(name, checked) {
+      if (checked) selectedDrugCompanies.add(name);
+      else selectedDrugCompanies.delete(name);
+      renderDrugCompanyList();
+    }
+
+    function clearDrugSelection() {
+      selectedDrugCompanies.clear();
+      renderDrugCompanyList();
+    }
+
+    function selectMonthlyDrugFocus() {
+      const targets = new Set(['康方生物', '康诺亚', '乐普生物']);
+      drugCompanyPool.forEach(company => {
+        if (targets.has(normalizeCompanyName(company.company_name))) {
+          selectedDrugCompanies.add(company.company_name);
+        }
+      });
+      const input = document.querySelector('[data-tool="drug"] input[name=company_search]');
+      if (input) input.value = '';
+      renderDrugCompanyList();
+    }
+
+    async function loadDrugCompanyPool() {
+      try {
+        const resp = await fetch('/api/drug/companies');
+        const json = await resp.json();
+        drugCompanyPool = json.companies || [];
+        renderDrugCompanyList();
+      } catch (err) {
+        const results = document.getElementById('drugCompanyResults');
+        if (results) results.innerHTML = `<div class="err">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
     async function runTool(tool) {
       const card = document.querySelector(`[data-tool="${tool}"]`);
       const result = card.querySelector('.result');
-      const button = card.querySelector('button');
-      const file = card.querySelector('input[type=file]').files[0];
-      if (!file) {
+      const button = card.querySelector('.button-row button');
+      const fileInput = card.querySelector('input[type=file]');
+      const file = fileInput ? fileInput.files[0] : null;
+      if (tool !== 'drug' && !file) {
         result.innerHTML = '<div class="err">请先选择文件。</div>';
         return;
       }
+      if (tool === 'drug' && drugMode === 'upload' && !file) {
+        result.innerHTML = '<div class="err">请先选择文件，或切换到搜索公司池。</div>';
+        return;
+      }
+      if (tool === 'drug' && drugMode === 'search' && selectedDrugCompanies.size === 0) {
+        result.innerHTML = '<div class="err">请先从公司池选择至少一家公司。</div>';
+        return;
+      }
       const data = new FormData();
-      data.append('file', file);
+      if (file) data.append('file', file);
+      if (tool === 'drug' && drugMode === 'search') {
+        data.append('selected_companies', JSON.stringify([...selectedDrugCompanies]));
+      }
       const skipNews = card.querySelector('input[name=skip_news]');
       if (skipNews) data.append('skip_news', skipNews.checked ? 'true' : 'false');
       const includeKlineChart = card.querySelector('input[name=include_kline_chart]');
@@ -217,7 +366,7 @@
       if (inputType) data.append('input_type', inputType.value);
 
       button.disabled = true;
-      result.innerHTML = '<p>运行中，请稍等。股票监控可能需要 1-3 分钟。</p>';
+      result.innerHTML = '<p>运行中，请稍等。股票监控可能需要 3-5 分钟。</p>';
       try {
         const resp = await fetch(`/api/${tool}`, { method: 'POST', body: data });
         const json = await resp.json();
@@ -231,6 +380,8 @@
         button.disabled = false;
       }
     }
+
+    loadDrugCompanyPool();
   </script>
 </body>
 </html>

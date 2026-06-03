@@ -1,4 +1,4 @@
-source_id,source_type,source_title,source_path_or_url,publish_date,company_name,drug_or_pipeline,target,indication,source_confidence,extract_priority,fields_to_extract,notes
-SRC-001,company_announcement,示例：某公司管线进展公告,data/innovative_drug_sources/announcements/example.pdf,待确认,待确认,待确认,待确认,待确认,高,高,"clinical_stage;latest_progress;next_catalyst;risks",公告优先作为事实核验来源
-SRC-002,clinical_registry,示例：ClinicalTrials.gov 登记页,data/innovative_drug_sources/clinical_trials/example.html,待确认,待确认,待确认,待确认,待确认,高,高,"clinical_stage;indication;trial_design;primary_endpoint;estimated_completion",临床登记用于核验阶段和试验设计
-SRC-003,research_report,示例：行业复盘研报,data/innovative_drug_sources/research_reports/example.pdf,待确认,待确认,待确认,待确认,待确认,中,中,"next_catalyst;competitive_landscape;rally_logic;verification_leads",研报观点要和公告/登记/官网交叉核验
+source_id,source_type,source_title,source_path_or_url,publish_date,retrieved_at,source_period,company_name,drug_or_pipeline,target,indication,source_confidence,extract_priority,fields_to_extract,notes
+SRC-001,company_announcement,示例：某公司管线进展公告,data/innovative_drug_sources/announcements/example.pdf,待确认,2026-06-02,待确认,待确认,待确认,待确认,待确认,高,高,"clinical_stage;latest_progress;progress_date;next_catalyst;next_catalyst_date_or_window;risks",公告优先作为事实核验来源
+SRC-002,clinical_registry,示例：ClinicalTrials.gov 登记页,data/innovative_drug_sources/clinical_trials/example.html,待确认,2026-06-02,待确认,待确认,待确认,待确认,待确认,高,高,"clinical_stage;indication;trial_design;primary_endpoint;estimated_completion;progress_date",临床登记用于核验阶段和试验设计
+SRC-003,research_report,示例：行业复盘研报,data/innovative_drug_sources/research_reports/example.pdf,待确认,2026-06-02,待确认,待确认,待确认,待确认,待确认,中,中,"next_catalyst;next_catalyst_date_or_window;competitive_landscape;rally_logic;verification_leads",研报观点要和公告/登记/官网交叉核验

@@ -16,7 +16,7 @@ Use this skill as the main workflow for innovative-drug investment research. It 
 Keep these modules connected but distinct:
 
 ```text
-source materials → pipeline facts → catalysts/progress → rally logic → risk signals
+AlphaPai/API source materials → source manifest → pipeline facts → catalysts/BD/progress → rally logic → risk signals
 ```
 
 Do not invent drug facts or stock-move causes. Mark uncertain information as `待确认` or `待核验线索`.
@@ -26,11 +26,13 @@ Do not invent drug facts or stock-move causes. Mark uncertain information as `�
 Use **source intake** when the user asks to:
 
 - add more real materials for tracking targeted innovative-drug development
+- use AlphaPai, PaiPai, or AlphaPai API as the data entrance for announcements, reports, roadshows, comments, social media, tables, or images
+- collect official company investor-relations and news/media pages such as financial reports, announcements and circulars, presentations, IR monthly/weekly reports, calendars, product pages, collaboration pages, news centers, company-news listings, or media coverage
 - decide whether to use APIs or manual source folders
 - standardize announcements, pipeline pages, annual reports, clinical registries, conference abstracts, or research reports
 - create or update a source manifest
 
-Read `references/source_intake.md` and `references/schemas.md`.
+Read `references/source_intake.md`, `references/alphapai_adapter.md`, and `references/schemas.md`.
 
 Use **pipeline structuring** when the user asks to:
 
@@ -39,7 +41,9 @@ Use **pipeline structuring** when the user asks to:
 - extract drug, target, indication, modality, clinical stage, progress, catalyst, competition, or risk fields
 - process company lists, research reports, slides, announcements, or AlphaPai-style outputs
 
-Read `references/pipeline_structuring.md` and `references/schemas.md`.
+Read `references/general_pipeline_workflow.md`, `references/pipeline_structuring.md`, and `references/schemas.md`.
+
+Use `references/general_pipeline_workflow.md` as the controlling workflow when building a reusable Excel workbook, integrating AlphaPai retrieval, auditing data quality, preventing cross-project field contamination, or deciding how to handle companies with or without a baseline workbook.
 
 Use **rally logic** when the user asks to:
 
@@ -61,10 +65,12 @@ Use **both modules** when the user asks to connect drug progress to stock moves:
 
 For pipeline structuring:
 
+- `company_ir_sources.csv`
 - `source_manifest.csv`
 - `company_master.csv`
 - `pipeline_progress.csv`
 - `catalyst_tracker.csv`
+- `bd_deal_tracker.csv`
 - `verification_queue.csv`
 
 For rally logic:
@@ -89,12 +95,17 @@ This creates first-pass company, pipeline seed, catalyst seed, and verification 
 
 The built-in `PIPELINE_SEEDS` in the script are starter examples only. Treat them as first-pass mapping rows and verification leads, not a complete innovative-drug database or final research conclusion.
 
+When AlphaPai API access is available, use `alphapai-research` for data retrieval and keep this skill responsible for normalization, verification, tracking tables, and final deliverables. Do not store API keys in this repository; configure them in the installed AlphaPai skill or local environment only.
+
 ## Quality Rules
 
 - Prefer `待确认` over guessing.
 - Keep source names in output rows.
 - Keep source confidence and verification status visible.
+- Keep event time and maintenance time separate: source publish date, retrieval date, progress date, catalyst window, BD announcement/signing/effective dates, last verified date, and output update date should not be collapsed into one field.
 - Do not treat research-deck interpretations as verified clinical facts.
 - Split multi-drug or multi-indication rows when enough detail exists.
+- Track BD terms separately when available: partner, territory, upfront payment, milestone value, equity/option terms, covered assets, and source confidence.
+- For Excel deliverables, follow `general_pipeline_workflow.md`: merge the first two rows as title/source rows, avoid duplicate company tabs for single-company runs, make `汇总` a project-level summary, sort and group `靶点-适应症明细` by company -> target -> drug/project -> indication, use compact core columns for the BD sheet, summarize progress/event cells in the main sheets, and put full sources/original excerpts in `附件索引`.
 - For stock-move explanations, label unsupported causes as `待核验线索`.
 - Make outputs updateable rather than one-off summaries.

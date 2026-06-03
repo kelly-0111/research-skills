@@ -22,9 +22,10 @@ import importlib.util
 import socket
 import html
 import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 from http.client import RemoteDisconnected
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -35,8 +36,10 @@ from urllib.request import Request, urlopen
 QUOTE_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
 QUOTE_SINGLE_URL = "https://push2.eastmoney.com/api/qt/stock/get"
 KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 BING_NEWS_RSS_URL = "https://www.bing.com/news/search"
 KLINE_CACHE_ROOT = Path(os.environ.get("STOCK_MONITOR_CACHE_DIR", Path.cwd() / ".cache" / "stock_move_monitor"))
+NEWS_LOOKBACK_DAYS = int(os.environ.get("STOCK_MONITOR_NEWS_LOOKBACK_DAYS", "14"))
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -379,7 +382,7 @@ def kline_providers_for(stock: Stock) -> tuple[str, ...]:
     providers = list(DEFAULT_KLINE_PROVIDERS)
     if stock.secid.startswith("116."):
         # efinance/akshare HK endpoints are more likely to hang or disconnect in local tests.
-        providers = ["eastmoney"]
+        providers = ["eastmoney", "tencent_hk"]
     if os.environ.get("STOCK_MONITOR_ENABLE_AKSHARE") == "1":
         providers.append("akshare")
     return tuple(dict.fromkeys(providers))
@@ -390,6 +393,8 @@ def fetch_klines_from_provider(stock: Stock, provider: str) -> list[dict[str, An
         return fetch_klines_eastmoney(stock)
     if provider == "efinance":
         return fetch_klines_efinance(stock)
+    if provider == "tencent_hk":
+        return fetch_klines_tencent_hk(stock)
     if provider == "akshare":
         return fetch_klines_akshare(stock)
     raise RuntimeError(f"Unknown K-line provider: {provider}")
@@ -440,6 +445,55 @@ def fetch_klines_eastmoney(stock: Stock) -> list[dict[str, Any]]:
                 "provider": "eastmoney",
             }
         )
+    return out
+
+
+def fetch_klines_tencent_hk(stock: Stock) -> list[dict[str, Any]]:
+    if not stock.secid.startswith("116."):
+        raise RuntimeError("Tencent HK K-line provider only supports HK stocks")
+    symbol = f"hk{stock.code.zfill(5)}"
+    data = fetch_json(
+        TENCENT_KLINE_URL,
+        {"param": f"{symbol},day,,,180,qfq"},
+        attempts=2,
+        timeout=8,
+        base_sleep=0.8,
+    )
+    raw = (((data.get("data") or {}).get(symbol) or {}).get("qfqday")) or (((data.get("data") or {}).get(symbol) or {}).get("day")) or []
+    out: list[dict[str, Any]] = []
+    prev_close = math.nan
+    for item in raw:
+        if not isinstance(item, list) or len(item) < 6:
+            continue
+        date = as_date_text(item[0])
+        open_price = as_float(item[1])
+        close = as_float(item[2])
+        high = as_float(item[3])
+        low = as_float(item[4])
+        volume = as_float(item[5])
+        if not date or math.isnan(close):
+            continue
+        chg = close - prev_close if not math.isnan(prev_close) else math.nan
+        pct_chg = chg / prev_close * 100 if not math.isnan(chg) and prev_close else math.nan
+        amplitude = (high - low) / prev_close * 100 if not math.isnan(prev_close) and prev_close else math.nan
+        out.append(
+            {
+                "date": date,
+                "open": open_price,
+                "close": close,
+                "high": high,
+                "low": low,
+                "volume": volume,
+                "amount": math.nan,
+                "amplitude": amplitude,
+                "pct_chg": pct_chg,
+                "chg": chg,
+                "turnover": math.nan,
+                "provider": "tencent_hk",
+            }
+        )
+        prev_close = close
+    out.sort(key=lambda row: row["date"])
     return out
 
 
@@ -736,21 +790,56 @@ def fetch_bing_news_items(query: str, stock: Stock, max_results: int) -> list[di
     return parse_bing_news_rss(xml_text, stock, limit=max_results)
 
 
+def parse_run_date(run_date: str) -> datetime:
+    try:
+        return datetime.strptime(run_date, "%Y-%m-%d")
+    except ValueError:
+        return datetime.now()
+
+
+def parse_news_date(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def is_recent_news_item(item: dict[str, str], run_date: str, lookback_days: int = NEWS_LOOKBACK_DAYS) -> bool:
+    published = parse_news_date(item.get("published_at", ""))
+    target_date = parse_run_date(run_date)
+    if published is None:
+        text = f"{item.get('title', '')} {item.get('description', '')}"
+        return run_date in text
+    earliest = target_date - timedelta(days=lookback_days)
+    latest = target_date + timedelta(days=1)
+    return earliest <= published <= latest
+
+
 def search_news_for_cause(stock: Stock, row: dict[str, Any], run_date: str, max_results: int = 5) -> tuple[list[dict[str, str]], str]:
+    earliest = (parse_run_date(run_date) - timedelta(days=NEWS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     queries = [
         f"{stock.name} {stock.code} 公告 披露 {run_date}",
-        primary_news_query(stock, row, run_date),
-        f"{stock.name} {stock.code} 业绩 合作 临床 获批",
-        f"{stock.name} 新闻",
-        f"{stock.name} 公告",
+        f"{primary_news_query(stock, row, run_date)} after:{earliest}",
+        f"{stock.name} {stock.code} 业绩 合作 临床 获批 after:{earliest}",
+        f"{stock.name} 新闻 after:{earliest}",
+        f"{stock.name} 公告 after:{earliest}",
     ]
     last_error = ""
     collected: list[dict[str, str]] = []
     seen_links: set[str] = set()
+    stale_count = 0
     try:
         for query in dict.fromkeys(queries):
             items = fetch_bing_news_items(query, stock, max_results)
             for item in items:
+                if not is_recent_news_item(item, run_date):
+                    stale_count += 1
+                    continue
                 link = item.get("link", "")
                 key = link or item.get("title", "")
                 if key in seen_links:
@@ -763,6 +852,8 @@ def search_news_for_cause(stock: Stock, row: dict[str, Any], run_date: str, max_
         last_error = f"新闻检索失败：{exc}"
     if last_error:
         return collected, last_error
+    if stale_count and not collected:
+        return [], f"新闻检索只返回旧闻或无日期结果，已过滤 {stale_count} 条超过近 {NEWS_LOOKBACK_DAYS} 天的材料。"
     return collected[:max_results], ""
 
 
@@ -858,6 +949,9 @@ def build_analyst_judgement(
 
 def judge_news_cause(stock: Stock, row: dict[str, Any], news_items: list[dict[str, str]], news_error: str) -> tuple[str, str, str, str, str, str]:
     if news_error:
+        if "旧闻" in news_error:
+            judgement = build_analyst_judgement(stock, row, [], "未发现近期来源", "无明显新闻")
+            return "未发现近期来源", "无明显新闻", "低", "", news_error, judgement
         judgement = build_analyst_judgement(stock, row, news_items, "检索失败", "待核验线索")
         return "检索失败", "待核验线索", "低", "", news_error, judgement
     if not news_items:

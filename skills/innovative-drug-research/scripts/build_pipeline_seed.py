@@ -85,6 +85,101 @@ PIPELINE_SEEDS = {
     ],
 }
 
+BD_DEAL_SEEDS = {
+    "康诺亚": [
+        {
+            "drug_or_pipeline": "CM326",
+            "target": "TSLP",
+            "modality": "单抗",
+            "partner": "石药集团",
+            "territory": "待确认",
+            "deal_type": "commercialization partnership/待确认",
+            "announcement_date": "待确认",
+            "signing_date": "待确认",
+            "effective_date": "待确认",
+            "closing_date": "待确认",
+            "upfront_payment": "待确认",
+            "milestone_value": "待确认",
+            "equity_or_option_terms": "待确认",
+            "covered_indications": "中重度哮喘; 慢性鼻窦炎伴鼻息肉; 特应性皮炎",
+            "latest_progress": "AlphaPai旧样例提及CM326与石药集团合作；需用公告或公司材料核验交易条款",
+            "latest_update_date": "待确认",
+            "next_milestone": "合作后续进展/适应症推进",
+            "next_milestone_date_or_window": "待确认",
+            "source_confidence": "低",
+            "verification_notes": "核验合作公告、授权区域、付款结构和覆盖适应症",
+        },
+        {
+            "drug_or_pipeline": "CM512",
+            "target": "TSLP×IL-13",
+            "modality": "双抗",
+            "partner": "Belenos Biosciences",
+            "territory": "海外/待确认",
+            "deal_type": "out-license/待确认",
+            "announcement_date": "待确认",
+            "signing_date": "待确认",
+            "effective_date": "待确认",
+            "closing_date": "待确认",
+            "upfront_payment": "1500万美元",
+            "milestone_value": "1.7亿美元",
+            "equity_or_option_terms": "Belenos约30%股权",
+            "covered_indications": "慢性鼻窦炎伴鼻息肉; 特应性皮炎; 哮喘; COPD; 慢性自发性荨麻疹",
+            "latest_progress": "AlphaPai旧样例提及首付款、里程碑和股权安排；需用公告核验",
+            "latest_update_date": "待确认",
+            "next_milestone": "临床进展/海外合作推进/里程碑触发",
+            "next_milestone_date_or_window": "待确认",
+            "source_confidence": "低",
+            "verification_notes": "核验公告日期、授权区域、里程碑口径和股权安排",
+        },
+        {
+            "drug_or_pipeline": "CM336",
+            "target": "BCMA×CD3",
+            "modality": "双抗",
+            "partner": "Ouro Medicines",
+            "territory": "海外/待确认",
+            "deal_type": "out-license/待确认",
+            "announcement_date": "待确认",
+            "signing_date": "待确认",
+            "effective_date": "待确认",
+            "closing_date": "待确认",
+            "upfront_payment": "1600万美元",
+            "milestone_value": "最高6.1亿美元",
+            "equity_or_option_terms": "待确认",
+            "covered_indications": "复发/难治性多发性骨髓瘤; AIHA; ITP; 轻链型淀粉样变性; 自免血细胞减少症; 干燥综合征/炎症性肌病",
+            "latest_progress": "AlphaPai旧样例提及首付款和里程碑；需用公告核验",
+            "latest_update_date": "待确认",
+            "next_milestone": "临床进展/合作推进/里程碑触发",
+            "next_milestone_date_or_window": "待确认",
+            "source_confidence": "低",
+            "verification_notes": "核验公告日期、授权区域和覆盖适应症",
+        },
+    ],
+    "信达生物": [
+        {
+            "drug_or_pipeline": "IBI343; IBI3001",
+            "target": "CLDN18.2; EGFR/B7H3",
+            "modality": "ADC",
+            "partner": "武田/待确认",
+            "territory": "待确认",
+            "deal_type": "BD合作/待确认",
+            "announcement_date": "待确认",
+            "signing_date": "待确认",
+            "effective_date": "待确认",
+            "closing_date": "待确认",
+            "upfront_payment": "待确认",
+            "milestone_value": "待确认",
+            "equity_or_option_terms": "待确认",
+            "covered_indications": "肿瘤",
+            "latest_progress": "复盘材料提及与武田BD合作组合；需用公告核验",
+            "latest_update_date": "待确认",
+            "next_milestone": "BD后续/临床数据",
+            "next_milestone_date_or_window": "待确认",
+            "source_confidence": "低",
+            "verification_notes": "核验合作方、交易金额、授权区域和具体资产",
+        }
+    ],
+}
+
 
 def clean_cell(cell: str) -> str:
     cell = re.sub(r"<[^>]+>", "", cell)
@@ -184,6 +279,8 @@ def main() -> None:
                 "modality_tags": tags_from_text(row["core_fields_raw"], MODALITY_KEYWORDS),
                 "disease_area_tags": tags_from_text(row["core_fields_raw"], DISEASE_KEYWORDS),
                 "priority_reason": "来自创新药上市公司列表；需按管线进一步核验",
+                "first_seen_date": today,
+                "last_checked_at": today,
                 "source": source_name,
                 "updated_at": today,
             }
@@ -204,11 +301,14 @@ def main() -> None:
                     "indication": indication,
                     "clinical_stage": stage,
                     "latest_progress": progress,
+                    "progress_date": "待确认",
                     "next_catalyst": catalyst,
+                    "next_catalyst_date_or_window": "待确认",
                     "competitive_landscape": landscape,
                     "risks": risks,
                     "source": source_name,
                     "source_confidence": "中",
+                    "last_verified_at": today,
                     "verification_notes": "用公告/官网/临床登记/研报继续核验阶段、适应症和最新进展",
                     "updated_at": today,
                 }
@@ -223,6 +323,9 @@ def main() -> None:
                     "company_name": row["company_name"],
                     "missing_item": "药物/管线、靶点、适应症、临床阶段、最新进展",
                     "suggested_next_source": "公司官网/年报/公告/临床试验登记/券商深度报告",
+                    "opened_at": today,
+                    "target_check_date": "待确认",
+                    "resolved_at": "待确认",
                     "source": source_name,
                     "updated_at": today,
                 }
@@ -235,6 +338,9 @@ def main() -> None:
             catalyst_rows.append(
                 {
                     "date_or_window": "待确认",
+                    "announced_date": "待确认",
+                    "expected_date_or_window": "待确认",
+                    "actual_date": "待确认",
                     "company_name": row["company_name"],
                     "drug_or_pipeline": row["drug_or_pipeline"],
                     "catalyst_type": "临床数据/BD/会议/适应症拓展",
@@ -243,6 +349,21 @@ def main() -> None:
                     "result": "待确认",
                     "expected_impact": "用于后续管线进展更新和竞争格局判断",
                     "source": source_name,
+                    "updated_at": today,
+                }
+            )
+
+    bd_rows = []
+    for company, seeds in BD_DEAL_SEEDS.items():
+        if company not in company_names:
+            continue
+        for seed in seeds:
+            bd_rows.append(
+                {
+                    "company_name": company,
+                    **seed,
+                    "source": source_name,
+                    "last_verified_at": today,
                     "updated_at": today,
                 }
             )
@@ -259,6 +380,8 @@ def main() -> None:
             "modality_tags",
             "disease_area_tags",
             "priority_reason",
+            "first_seen_date",
+            "last_checked_at",
             "source",
             "updated_at",
         ],
@@ -274,11 +397,14 @@ def main() -> None:
             "indication",
             "clinical_stage",
             "latest_progress",
+            "progress_date",
             "next_catalyst",
+            "next_catalyst_date_or_window",
             "competitive_landscape",
             "risks",
             "source",
             "source_confidence",
+            "last_verified_at",
             "verification_notes",
             "updated_at",
         ],
@@ -288,6 +414,9 @@ def main() -> None:
         catalyst_rows,
         [
             "date_or_window",
+            "announced_date",
+            "expected_date_or_window",
+            "actual_date",
             "company_name",
             "drug_or_pipeline",
             "catalyst_type",
@@ -300,14 +429,54 @@ def main() -> None:
         ],
     )
     write_csv(
+        args.out_dir / "bd_deal_tracker_seed.csv",
+        bd_rows,
+        [
+            "company_name",
+            "drug_or_pipeline",
+            "target",
+            "modality",
+            "partner",
+            "territory",
+            "deal_type",
+            "announcement_date",
+            "signing_date",
+            "effective_date",
+            "closing_date",
+            "upfront_payment",
+            "milestone_value",
+            "equity_or_option_terms",
+            "covered_indications",
+            "latest_progress",
+            "latest_update_date",
+            "next_milestone",
+            "next_milestone_date_or_window",
+            "source",
+            "source_confidence",
+            "last_verified_at",
+            "verification_notes",
+            "updated_at",
+        ],
+    )
+    write_csv(
         args.out_dir / "verification_queue.csv",
         verification_rows,
-        ["company_name", "missing_item", "suggested_next_source", "source", "updated_at"],
+        [
+            "company_name",
+            "missing_item",
+            "suggested_next_source",
+            "opened_at",
+            "target_check_date",
+            "resolved_at",
+            "source",
+            "updated_at",
+        ],
     )
 
     print(f"company_master rows: {len(company_rows)}")
     print(f"pipeline_progress_seed rows: {len(pipeline_rows)}")
     print(f"catalyst_tracker_seed rows: {len(catalyst_rows)}")
+    print(f"bd_deal_tracker_seed rows: {len(bd_rows)}")
     print(f"verification_queue rows: {len(verification_rows)}")
     print(f"out_dir: {args.out_dir}")
 

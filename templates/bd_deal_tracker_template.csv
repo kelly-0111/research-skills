@@ -1,0 +1,2 @@
+company_name,drug_or_pipeline,target,modality,partner,territory,deal_type,announcement_date,signing_date,effective_date,closing_date,upfront_payment,milestone_value,equity_or_option_terms,covered_indications,latest_progress,latest_update_date,next_milestone,next_milestone_date_or_window,source,source_confidence,last_verified_at,verification_notes,updated_at
+示例公司,示例药物,待确认,双抗,示例合作方,海外,out-license,待确认,待确认,待确认,待确认,待确认,待确认,待确认,待确认,待确认,待确认,待确认,待确认,示例来源,待确认,待确认,需要核验公告/研报/AlphaPai召回原文中的公告日期、签约日期、生效日期和下一里程碑时间,2026-06-02
