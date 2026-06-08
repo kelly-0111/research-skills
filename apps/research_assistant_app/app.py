@@ -56,6 +56,7 @@ ALPHAPAI_SKILL_DIR = Path.home() / ".codex" / "skills" / "alphapai-research"
 ALPHAPAI_CLIENT = ALPHAPAI_SKILL_DIR / "scripts" / "alphapai_client.py"
 ALPHAPAI_CONFIG = ALPHAPAI_SKILL_DIR / "config.json"
 ALPHAPAI_RECALL_START_DATE = "2025-01-01"
+ALPHAPAI_BD_RECALL_START_DATE = "2000-01-01"
 ALPHAPAI_RECALL_TYPES = "ann,report,roadShow,roadShow_ir,social_media"
 
 
@@ -1133,20 +1134,45 @@ def alphapai_company_context(company: str) -> dict[str, list[str]]:
     return {key: list(dict.fromkeys(value)) for key, value in context.items()}
 
 
-def alphapai_recall_queries(company: str) -> list[str]:
+def alphapai_recall_queries(company: str) -> list[dict[str, str]]:
     context = alphapai_company_context(company)
     alias_text = " ".join(context["aliases"][:6])
     project_text = " ".join(context["projects"][:10])
     partner_text = " ".join(context["partners"][:8])
     base = f"{alias_text} {project_text}".strip()
     queries = [
-        f"{base} 创新药 管线 靶点 适应症 研发阶段 最新进展 年报 研报 路演",
-        f"{base} 2025年报 2024年报 年度报告 业绩会 管理层 路演 商业化 销售 医保",
-        f"{base} {partner_text} BD license-out NewCo 授权 合作 首付款 里程碑",
-        f"{base} 临床数据 读出 NDA BLA IND 催化剂 2026",
-        f"{base} 估值 盈利预测 DCF 目标价 收入 毛利率 销售费用",
+        {
+            "label": "pipeline_recent",
+            "query": f"{base} 创新药 管线 靶点 适应症 研发阶段 最新进展 年报 研报 路演",
+            "start_date": ALPHAPAI_RECALL_START_DATE,
+        },
+        {
+            "label": "commercial_recent",
+            "query": f"{base} 2025年报 2024年报 年度报告 业绩会 管理层 路演 商业化 销售 医保",
+            "start_date": ALPHAPAI_RECALL_START_DATE,
+        },
+        {
+            "label": "bd_full_history",
+            "query": f"{base} {partner_text} 历史BD license-out NewCo 授权 合作 首付款 里程碑 交易金额 权益区域",
+            "start_date": ALPHAPAI_BD_RECALL_START_DATE,
+        },
+        {
+            "label": "clinical_catalyst_recent",
+            "query": f"{base} 临床数据 读出 NDA BLA IND 催化剂 2026",
+            "start_date": ALPHAPAI_RECALL_START_DATE,
+        },
+        {
+            "label": "valuation_recent",
+            "query": f"{base} 估值 盈利预测 DCF 目标价 收入 毛利率 销售费用",
+            "start_date": ALPHAPAI_RECALL_START_DATE,
+        },
     ]
-    return [re.sub(r"\s+", " ", query).strip() for query in queries if query.strip()]
+    cleaned = []
+    for item in queries:
+        query = re.sub(r"\s+", " ", item["query"]).strip()
+        if query:
+            cleaned.append({**item, "query": query})
+    return cleaned
 
 
 def alphapai_run_recall_query(query: str, start_date: str = ALPHAPAI_RECALL_START_DATE) -> dict[str, Any]:
@@ -1175,8 +1201,11 @@ def alphapai_recall_company(company: str, out_dir: Path) -> list[dict[str, Any]]
     merged_items: list[dict[str, Any]] = []
     seen: set[str] = set()
     query_payloads: list[dict[str, Any]] = []
-    for idx, query in enumerate(alphapai_recall_queries(company), start=1):
-        payload = alphapai_run_recall_query(query)
+    for idx, query_spec in enumerate(alphapai_recall_queries(company), start=1):
+        query = query_spec["query"]
+        start_date = query_spec.get("start_date", ALPHAPAI_RECALL_START_DATE)
+        label = query_spec.get("label", "recall")
+        payload = alphapai_run_recall_query(query, start_date=start_date)
         raw_path = out_dir / f"alphapai_recall_{safe_name(company)}_{idx:02d}.json"
         raw_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         data = payload.get("data", [])
@@ -1185,7 +1214,8 @@ def alphapai_recall_company(company: str, out_dir: Path) -> list[dict[str, Any]]
         query_payloads.append(
             {
                 "query": query,
-                "start_date": ALPHAPAI_RECALL_START_DATE,
+                "query_label": label,
+                "start_date": start_date,
                 "types": ALPHAPAI_RECALL_TYPES,
                 "item_count": len(data),
                 "raw_file": raw_path.name,
@@ -1194,6 +1224,8 @@ def alphapai_recall_company(company: str, out_dir: Path) -> list[dict[str, Any]]
         for item in data:
             if not isinstance(item, dict):
                 continue
+            item["_alphapai_query_label"] = label
+            item["_alphapai_query_start_date"] = start_date
             item_id = str(item.get("id") or "")
             key = item_id or f"{item.get('type','')}|{item.get('title','')}|{item.get('time','')}"
             if key in seen:
@@ -1219,9 +1251,9 @@ def alphapai_deep_research_company(company: str, out_dir: Path) -> dict[str, Any
         f"请基于AlphaPai可检索到的公告、年报/中报、券商研报、路演纪要和公开新闻，"
         f"生成{alias_text}的创新药管线与投资价值底稿。重点覆盖："
         f"1）{project_text}等核心资产的药物-靶点-适应症-阶段-最新进展；"
-        "2）BD/license-out/NewCo交易、合作方、金额和权益；"
+        "2）BD/license-out/NewCo交易、合作方、金额和权益，BD需覆盖成立以来/上市以来可检索的全部历史交易，不限近两年；"
         "3）商业化、医保、销售放量、收入利润假设；"
-        "4）2026年临床/注册/BD催化剂；"
+        "4）2026年临床/注册催化剂，以及历史BD交易后的后续里程碑；"
         "5）竞争格局、估值逻辑、行情验证需要关注的数据。"
         "请保留关键时间、数字、来源线索，不要只给泛泛总结。"
     )
@@ -1564,7 +1596,7 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
                 "source_path_or_url": item.get("id", ""),
                 "publish_date": publish_date,
                 "retrieved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "source_period": f"{ALPHAPAI_RECALL_START_DATE}至今",
+                "source_period": f"{item.get('_alphapai_query_start_date') or ALPHAPAI_RECALL_START_DATE}至今",
                 "company_name": company,
                 "drug_or_pipeline": "",
                 "target": "",
@@ -1687,7 +1719,7 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
                     "source_path_or_url": item.get("id", ""),
                     "publish_date": publish_date,
                     "retrieved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "source_period": f"{ALPHAPAI_RECALL_START_DATE}至今",
+                    "source_period": f"{item.get('_alphapai_query_start_date') or ALPHAPAI_RECALL_START_DATE}至今",
                     "company_name": company,
                     "drug_or_pipeline": pattern["drug"],
                     "target": pattern["target"],
