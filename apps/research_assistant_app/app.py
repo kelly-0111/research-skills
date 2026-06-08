@@ -1394,6 +1394,130 @@ def detect_catalyst_type(text: str) -> str:
     return "管线进展"
 
 
+def detect_next_milestone(text: str, stage: str = "", drug: str = "", indication: str = "", window: str = "") -> str:
+    clean = re.sub(r"\s+", " ", text or "")
+    context = f"{drug} {indication} {stage} {window} {clean}"
+    is_listed = "已上市" in stage or any(word in clean for word in ["获批上市", "商业化", "纳入医保", "医保目录"])
+
+    if "CM310" in drug or "司普奇拜" in drug or "康悦达" in drug:
+        if indication in {"特应性皮炎", "慢性鼻窦炎伴鼻息肉"} and is_listed:
+            return "商业化放量/医保后渗透"
+        if "季节性过敏性鼻炎" in indication:
+            return "SAR商业化/适应症拓展跟踪" if is_listed else "SAR注册审评/获批跟踪"
+        if "青少年" in indication or "儿童" in indication:
+            return "青少年/儿童AD注册审评" if ("NDA" in stage or "BLA" in stage or "受理" in clean) else "青少年/儿童AD临床推进"
+        if "结节性痒疹" in indication:
+            return "结节性痒疹NDA审评" if ("NDA" in stage or "BLA" in stage or "受理" in clean) else "结节性痒疹注册申报"
+        if "哮喘" in indication:
+            return "哮喘III期推进/数据更新"
+        if is_listed:
+            return "商业化放量/适应症拓展"
+
+    if "CM512" in drug:
+        if "慢性鼻窦炎" in indication:
+            return "CRSwNP II期数据读出"
+        if "哮喘" in indication:
+            return "美国哮喘I/II期入组/数据更新" if "Belenos" in context or "美国" in context else "哮喘II期推进"
+        if "COPD" in indication:
+            return "COPD II期推进/数据更新"
+        if "特应性皮炎" in indication:
+            return "AD II期推进/数据更新"
+        if "荨麻疹" in indication:
+            return "CSU II期推进/数据更新"
+
+    if "CMG901" in drug or "AZD0901" in drug:
+        if "胃癌" in indication or "胃食管" in indication:
+            if any(word in context for word in ["二线", "2L", "二线及以上"]):
+                return "2L+胃癌III期数据/注册推进"
+            if any(word in context for word in ["一线", "1L", "联合"]):
+                return "1L胃癌III期入组推进"
+            return "胃癌III期数据/注册推进"
+        if "胰腺癌" in indication or "胆道癌" in indication:
+            return "胰腺癌/胆道癌II期探索数据"
+
+    if "CM518D1" in drug or "CM518" in drug:
+        if any(word in context for word in ["ESMO", "ASCO", "GI", "数据"]):
+            return "ESMO/ASCO GI早期数据披露"
+        return "I/II期剂量递增/扩展数据"
+
+    if "CM336" in drug:
+        if "多发性骨髓瘤" in indication:
+            return "MM III期推进/注册路径确认"
+        if "轻链型淀粉样变性" in indication:
+            return "AL适应症BLA/NDA进展"
+        if any(word in indication for word in ["干燥综合征", "系统性硬化症", "红斑狼疮"]):
+            return "自免适应症早期数据更新"
+
+    if "CM326" in drug:
+        if "石药" in context:
+            return f"{indication or 'TSLP'} II期推进/石药合作进展"
+        return f"{indication or 'TSLP'} II期数据更新"
+
+    rules = [
+        (["顶线数据", "topline", "Topline"], "顶线数据读出"),
+        (["读出", "数据公布", "公布数据", "披露数据", "数据发布"], "临床数据读出/披露"),
+        (["完成入组", "入组完成"], "完成入组"),
+        (["首例患者给药", "首例受试者给药", "首例给药", "首例入组"], "首例患者入组/给药"),
+        (["启动III期", "启动 III期", "III期启动", "三期启动"], "III期启动"),
+        (["启动II期", "启动 II期", "II期启动", "二期启动"], "II期启动"),
+        (["递交BLA", "提交BLA", "申报BLA"], "BLA递交"),
+        (["递交NDA", "提交NDA", "申报NDA"], "NDA递交"),
+        (["BLA获受理", "NDA获受理", "上市申请获受理", "获NMPA受理", "获受理"], "上市申请获受理"),
+        (["优先审评"], "优先审评/审评进展"),
+        (["获批上市", "批准上市", "获NMPA批准"], "获批上市"),
+        (["纳入医保", "医保目录"], "医保纳入/执行"),
+        (["里程碑付款", "里程碑款", "触发", "付款"], "里程碑付款/触发"),
+        (["BD", "授权", "许可协议", "license", "License", "NewCo", "合作"], "BD合作/授权进展"),
+        (["IND申报", "申报IND", "申报临床", "临床试验申请"], "IND申报/受理"),
+        (["ASCO", "ESMO", "AACR", "ASH", "AAD", "学术大会", "会议"], "学术会议数据披露"),
+    ]
+    for keywords, label in rules:
+        if any(keyword in clean for keyword in keywords):
+            return label
+    if "已上市" in stage:
+        return "商业化放量/适应症拓展"
+    if "NDA" in stage or "BLA" in stage:
+        return "上市申请审评进展"
+    if "III" in stage or "Ⅲ" in stage:
+        return "III期数据/注册申报进展"
+    if "II" in stage or "Ⅱ" in stage:
+        return "II期数据/下一阶段推进"
+    if "I" in stage or "Ⅰ" in stage:
+        return "I期安全性/剂量递增数据"
+    return "待确认"
+
+
+def milestone_specificity(value: str) -> int:
+    text = value or ""
+    if not text or text == "待确认":
+        return 0
+    generic = {
+        "注册/获批",
+        "管线进展",
+        "BD/里程碑",
+        "临床数据读出/会议",
+        "II期数据/下一阶段推进",
+        "III期数据/注册申报进展",
+        "商业化放量/适应症拓展",
+        "上市申请审评进展",
+        "BD合作/授权进展",
+    }
+    score = 1 if text in generic else 4
+    score += sum(1 for word in ["NDA", "BLA", "III", "II", "I期", "数据", "入组", "给药", "医保", "里程碑", "AD", "CRSwNP", "胃癌", "哮喘", "审评", "注册", "商业化", "适应症"] if word in text)
+    if "BD" in text or "授权" in text:
+        score -= 2
+    if "临床推进" in text:
+        score -= 1
+    return score
+
+
+def choose_best_milestone(values: list[str]) -> str:
+    clean = [value for value in values if value and value != "待确认"]
+    if not clean:
+        return "待确认"
+    return sorted(clean, key=lambda item: (-milestone_specificity(item), item))[0]
+
+
 def detect_partner_and_terms(text: str) -> tuple[str, str, str, str]:
     partner_map = {
         "Summit": ["Summit"],
@@ -1486,7 +1610,7 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
                         "clinical_stage": stage,
                         "latest_progress": progress,
                         "progress_date": publish_date or "待确认",
-                        "next_catalyst": detect_catalyst_type(text),
+                        "next_catalyst": detect_next_milestone(relevant_text, stage, pattern["drug"], indication, window),
                         "next_catalyst_date_or_window": window,
                         "competitive_landscape": "AlphaPai召回资料提及，需结合同靶点竞品继续核验",
                         "risks": "临床数据、监管审批、商业化及BD兑现不确定性",
@@ -1546,7 +1670,7 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
                         "covered_indications": "；".join(indications),
                         "latest_progress": progress,
                         "latest_update_date": publish_date or "待确认",
-                        "next_milestone": detect_catalyst_type(text),
+                        "next_milestone": detect_next_milestone(relevant_text, stage, pattern["drug"], "；".join(indications), window),
                         "next_milestone_date_or_window": window,
                         "source": source,
                         "source_confidence": confidence,
@@ -1591,7 +1715,7 @@ def collapse_pipeline_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         key = (row.get("company_name", ""), row.get("drug_or_pipeline", ""), row.get("indication", ""))
         if key not in grouped:
             grouped[key] = dict(row)
-            buckets[key] = {"stages": [], "dates": [], "progress": [], "sources": [], "windows": []}
+            buckets[key] = {"stages": [], "dates": [], "progress": [], "sources": [], "windows": [], "milestones": []}
         bucket = buckets[key]
         for field, target in [
             ("clinical_stage", "stages"),
@@ -1599,6 +1723,7 @@ def collapse_pipeline_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ("latest_progress", "progress"),
             ("source", "sources"),
             ("next_catalyst_date_or_window", "windows"),
+            ("next_catalyst", "milestones"),
         ]:
             value = row.get(field, "")
             if value and value not in bucket[target]:
@@ -1611,6 +1736,27 @@ def collapse_pipeline_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         row["latest_progress"] = bucket["progress"][0] if bucket["progress"] else row.get("latest_progress", "")
         row["source"] = "；".join(bucket["sources"][:3])
         row["next_catalyst_date_or_window"] = latest_date(bucket["windows"])
+        chosen_milestone = choose_best_milestone(bucket["milestones"])
+        contextual_milestone = detect_next_milestone(
+            row.get("latest_progress", ""),
+            row.get("clinical_stage", ""),
+            row.get("drug_or_pipeline", ""),
+            row.get("indication", ""),
+            row.get("next_catalyst_date_or_window", ""),
+        )
+        generic_milestones = {
+            "BD合作/授权进展",
+            "III期数据/注册申报进展",
+            "II期数据/下一阶段推进",
+            "上市申请审评进展",
+            "商业化放量/适应症拓展",
+        }
+        if contextual_milestone != "待确认" and (
+            chosen_milestone in generic_milestones
+            or milestone_specificity(contextual_milestone) > milestone_specificity(chosen_milestone)
+        ):
+            chosen_milestone = contextual_milestone
+        row["next_catalyst"] = chosen_milestone
         row["verification_notes"] = f"AlphaPai投研资料抽取并按药物-适应症聚合；合并来源 {len(bucket['sources'])} 条，可在附件索引回溯"
         collapsed.append(row)
     return collapsed
