@@ -2025,16 +2025,22 @@ def concise_research_text(value: str, max_chars: int = 120) -> str:
     return summary
 
 
-def source_brief(value: str, max_items: int = 2) -> str:
+def source_brief(value: str, max_items: int = 2, include_attachment_suffix: bool = True) -> str:
     sources = [item.strip() for item in re.split(r"[；;]", value or "") if item.strip()]
     brief = []
     for source in sources[:max_items]:
+        if source.startswith(("上传公司列表：", "上传材料：")):
+            brief.append(source)
+            continue
+        if re.search(r"(^/Users/|^/private/|^/tmp/|^[A-Za-z]:[\\/])", source):
+            brief.append(f"上传材料：{Path(source).name}")
+            continue
         parts = source.split(":", 2)
         if len(parts) == 3:
             brief.append(f"{parts[0]}:{parts[1]}")
         else:
             brief.append(clip_text(source, 28))
-    suffix = "；详见附件索引" if sources else ""
+    suffix = "；详见附件索引" if sources and include_attachment_suffix else ""
     return "；".join(dict.fromkeys(brief)) + suffix
 
 
@@ -2685,7 +2691,7 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             row.get("opened_at", ""),
             row.get("target_check_date", ""),
             row.get("resolved_at", ""),
-            row.get("source", ""),
+            source_brief(row.get("source", ""), max_items=1, include_attachment_suffix=False),
         ])
 
     revenue_sheet = cm310_revenue_template_rows(company_rows, pipeline_rows)
@@ -3355,6 +3361,8 @@ def run_drug_research(fields: dict[str, Any]) -> dict[str, Any]:
             str(path),
             "--out-dir",
             str(out_dir),
+            "--source-name",
+            f"上传公司列表：{path.name}",
         ]
         drug_seed.main()
     finally:

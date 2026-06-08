@@ -255,10 +255,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--company-list", required=True, type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
+    parser.add_argument("--source-name", default="")
     args = parser.parse_args()
 
     today = dt.date.today().isoformat()
-    source_name = str(args.company_list)
+    source_name = args.source_name.strip() or f"上传公司列表：{args.company_list.name}"
     text = args.company_list.read_text(encoding="utf-8")
     parsed = parse_markdown_tables(text)
 
