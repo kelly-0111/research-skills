@@ -15,9 +15,11 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import webbrowser
 import zipfile
+from collections import Counter
 from datetime import datetime
 from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,7 +32,7 @@ from xml.etree import ElementTree as ET
 
 APP_DIR = Path(__file__).resolve().parent
 def find_project_root() -> Path:
-    candidates = [APP_DIR, APP_DIR.parent, *APP_DIR.parents]
+    candidates = [APP_DIR, *APP_DIR.parents]
     for candidate in candidates:
         if (candidate / "skills").exists() and (candidate / "templates").exists():
             return candidate
@@ -106,10 +108,7 @@ def timestamp() -> str:
 
 
 def safe_name(filename: str) -> str:
-    keep = []
-    for ch in filename:
-        keep.append(ch if ch.isalnum() or ch in "._-" else "_")
-    return "".join(keep) or "upload"
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename) or "upload"
 
 
 def save_upload(upload: dict[str, Any], prefix: str) -> Path:
@@ -119,70 +118,7 @@ def save_upload(upload: dict[str, Any], prefix: str) -> Path:
     return path
 
 
-def xlsx_to_csv_text(path: Path) -> str:
-    """Read the first worksheet of a simple .xlsx file using only stdlib."""
-    ns = {
-        "a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-    }
-    with zipfile.ZipFile(path) as zf:
-        shared: list[str] = []
-        if "xl/sharedStrings.xml" in zf.namelist():
-            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
-            for si in root.findall("a:si", ns):
-                texts = [node.text or "" for node in si.findall(".//a:t", ns)]
-                shared.append("".join(texts))
-
-        workbook = ET.fromstring(zf.read("xl/workbook.xml"))
-        rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
-        first_sheet = workbook.find("a:sheets/a:sheet", ns)
-        if first_sheet is None:
-            raise ValueError("Excel 文件没有可读取的工作表")
-        rel_id = first_sheet.attrib[f"{{{ns['r']}}}id"]
-        target = None
-        for rel in rels:
-            if rel.attrib.get("Id") == rel_id:
-                target = rel.attrib["Target"]
-                break
-        if not target:
-            raise ValueError("Excel 文件没有可读取的工作表")
-        sheet_path = "xl/" + target.lstrip("/")
-        if sheet_path not in zf.namelist():
-            sheet_path = "xl/worksheets/sheet1.xml"
-
-        sheet = ET.fromstring(zf.read(sheet_path))
-        rows: list[list[str]] = []
-        for row in sheet.findall(".//a:sheetData/a:row", ns):
-            values: list[str] = []
-            last_col = 0
-            for cell in row.findall("a:c", ns):
-                ref = cell.attrib.get("r", "")
-                col_letters = "".join(ch for ch in ref if ch.isalpha())
-                col_index = 0
-                for ch in col_letters:
-                    col_index = col_index * 26 + (ord(ch.upper()) - ord("A") + 1)
-                while last_col + 1 < col_index:
-                    values.append("")
-                    last_col += 1
-                raw = cell.findtext("a:v", default="", namespaces=ns)
-                if cell.attrib.get("t") == "s" and raw:
-                    value = shared[int(raw)]
-                elif cell.attrib.get("t") == "inlineStr":
-                    texts = [node.text or "" for node in cell.findall(".//a:t", ns)]
-                    value = "".join(texts)
-                else:
-                    value = raw
-                values.append(value)
-                last_col = col_index
-            rows.append(values)
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerows(rows)
-    return buf.getvalue()
-
-
-def xlsx_sheet_rows(path: Path, max_rows: int = 500) -> list[tuple[str, list[list[str]]]]:
+def _read_xlsx_sheets(path: Path, max_rows: int | None = None) -> list[tuple[str, list[list[str]]]]:
     """Read worksheet values from a simple .xlsx file using only stdlib."""
     ns = {
         "a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -204,12 +140,15 @@ def xlsx_sheet_rows(path: Path, max_rows: int = 500) -> list[tuple[str, list[lis
             sheet_name = sheet_info.attrib.get("name", "Sheet")
             rel_id = sheet_info.attrib.get(f"{{{ns['r']}}}id", "")
             target = rel_targets.get(rel_id, "")
+            if not target:
+                continue
             sheet_path = "xl/" + target.lstrip("/")
             if sheet_path not in zf.namelist():
                 continue
             sheet = ET.fromstring(zf.read(sheet_path))
             rows: list[list[str]] = []
-            for row in sheet.findall(".//a:sheetData/a:row", ns)[:max_rows]:
+            raw_rows = sheet.findall(".//a:sheetData/a:row", ns)
+            for row in raw_rows[:max_rows] if max_rows is not None else raw_rows:
                 values: list[str] = []
                 last_col = 0
                 for cell in row.findall("a:c", ns):
@@ -234,6 +173,21 @@ def xlsx_sheet_rows(path: Path, max_rows: int = 500) -> list[tuple[str, list[lis
                 rows.append(values)
             sheets.append((sheet_name, rows))
     return sheets
+
+
+def xlsx_to_csv_text(path: Path) -> str:
+    """Read the first worksheet of a simple .xlsx file using only stdlib."""
+    sheets = _read_xlsx_sheets(path)
+    if not sheets:
+        raise ValueError("Excel 文件没有可读取的工作表")
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerows(sheets[0][1])
+    return buf.getvalue()
+
+
+def xlsx_sheet_rows(path: Path, max_rows: int = 500) -> list[tuple[str, list[list[str]]]]:
+    return _read_xlsx_sheets(path, max_rows=max_rows)
 
 
 def read_tabular_upload(path: Path) -> str:
@@ -454,10 +408,7 @@ def split_tags(value: str) -> list[str]:
 
 
 def count_items(items: list[str]) -> list[tuple[str, int]]:
-    counts: dict[str, int] = {}
-    for item in items:
-        counts[item] = counts.get(item, 0) + 1
-    return sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    return sorted(Counter(item for item in items if item).items(), key=lambda pair: (-pair[1], pair[0]))
 
 
 def to_float(value: Any) -> float | None:
@@ -517,25 +468,32 @@ def xml_escape(value: Any) -> str:
     return xml_escape_raw(text)
 
 
-def stage_style_id(value: Any) -> int:
+_STAGE_LEVELS: list[tuple[tuple[str, ...], int, int]] = [
+    (("已上市",), 90, 2),
+    (("NDA", "BLA"), 80, 3),
+    (("III", "Ⅲ"), 70, 4),
+    (("I/II", "Ⅰ/Ⅱ"), 55, 6),
+    (("II", "Ⅱ"), 60, 5),
+    (("Ib", "Ia", "I期", "Ⅰ期", "I"), 50, 6),
+    (("IND",), 30, 7),
+    (("研究者",), 20, 7),
+    (("临床前",), 10, 7),
+]
+
+
+def _stage_info(value: Any) -> tuple[int, int]:
     text = str(value or "").strip()
     if not text or text == "待确认":
-        return 0
-    if "已上市" in text:
-        return 2
-    if "NDA" in text or "BLA" in text:
-        return 3
-    if "III" in text or "Ⅲ" in text:
-        return 4
-    if "I/II" in text or "Ⅰ/Ⅱ" in text:
-        return 6
-    if "II" in text or "Ⅱ" in text:
-        return 5
-    if "Ib" in text or "Ia" in text or "I期" in text or "Ⅰ期" in text or text == "I":
-        return 6
-    if "IND" in text or "研究者" in text or "临床前" in text:
-        return 7
-    return 0
+        return 0, 0
+    for keywords, rank, style_id in _STAGE_LEVELS:
+        for keyword in keywords:
+            if (keyword == "I" and text == "I") or (keyword != "I" and keyword in text):
+                return rank, style_id
+    return 0, 0
+
+
+def stage_style_id(value: Any) -> int:
+    return _stage_info(value)[1]
 
 
 def sheet_header_row_index(rows: list[list[Any]]) -> int:
@@ -821,26 +779,7 @@ def split_drug_project(value: str) -> tuple[str, str]:
 
 
 def stage_rank(stage: str) -> int:
-    text = str(stage or "")
-    if "已上市" in text:
-        return 90
-    if "NDA" in text or "BLA" in text:
-        return 80
-    if "III" in text or "Ⅲ" in text:
-        return 70
-    if "I/II" in text or "Ⅰ/Ⅱ" in text:
-        return 55
-    if "II" in text or "Ⅱ" in text:
-        return 60
-    if "Ib" in text or "Ia" in text or "I期" in text or "Ⅰ期" in text:
-        return 50
-    if "IND" in text:
-        return 30
-    if "研究者" in text:
-        return 20
-    if "临床前" in text:
-        return 10
-    return 0
+    return _stage_info(stage)[0]
 
 
 def choose_highest_stage(stages: list[str]) -> str:
@@ -1397,14 +1336,14 @@ def project_section_text(item: dict[str, Any], pattern: dict[str, Any]) -> str:
         for pos in sorted(set(positions))[:4]:
             start = pos
             marker_matches = [
-                match for pattern_text in section_starts
-                for match in re.finditer(pattern_text, chunk_text[:pos], flags=re.IGNORECASE)
+                match for section_pattern in section_starts
+                for match in re.finditer(section_pattern, chunk_text[:pos], flags=re.IGNORECASE)
             ]
             if marker_matches and pos - marker_matches[-1].start() <= 80:
                 start = marker_matches[-1].start()
             end = len(chunk_text)
-            for pattern_text in section_starts:
-                match = re.search(pattern_text, chunk_text[pos + 1:], flags=re.IGNORECASE)
+            for section_pattern in section_starts:
+                match = re.search(section_pattern, chunk_text[pos + 1:], flags=re.IGNORECASE)
                 if match:
                     candidate = pos + 1 + match.start()
                     marker = chunk_text[candidate:candidate + 80].lower()
@@ -3850,6 +3789,17 @@ class ResearchHandler(BaseHTTPRequestHandler):
         body = json.dumps(json_safe(payload), ensure_ascii=False, allow_nan=False).encode("utf-8")
         self.send_bytes(status, body, "application/json; charset=utf-8")
 
+    def resolve_output_file(self, path: str, prefix: str) -> Path | None:
+        parts = path.split("/")
+        if len(parts) != 4 or parts[1] != prefix:
+            return None
+        run_id, filename = parts[2], parts[3]
+        folder = output_folder_for_run(run_id)
+        file_path = (folder / filename).resolve() if folder else None
+        if file_path and file_path.exists() and file_path.is_file() and folder and folder in file_path.parents:
+            return file_path
+        return None
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
@@ -3888,26 +3838,18 @@ class ResearchHandler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/preview/"):
-            parts = path.split("/")
-            if len(parts) == 4:
-                run_id, filename = parts[2], parts[3]
-                folder = output_folder_for_run(run_id)
-                file_path = (folder / filename).resolve() if folder else None
-                if file_path and file_path.exists() and file_path.is_file() and folder and folder in file_path.parents:
-                    self.send_bytes(200, render_file_preview(file_path), "text/html; charset=utf-8")
-                    return
+            file_path = self.resolve_output_file(path, "preview")
+            if file_path:
+                self.send_bytes(200, render_file_preview(file_path), "text/html; charset=utf-8")
+                return
             self.send_bytes(404, "预览文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
             return
 
         if path.startswith("/download/"):
-            parts = path.split("/")
-            if len(parts) == 4:
-                run_id, filename = parts[2], parts[3]
-                folder = output_folder_for_run(run_id)
-                file_path = (folder / filename).resolve() if folder else None
-                if file_path and file_path.exists() and file_path.is_file() and folder and folder in file_path.parents:
-                    self.send_download(file_path)
-                    return
+            file_path = self.resolve_output_file(path, "download")
+            if file_path:
+                self.send_download(file_path)
+                return
             self.send_bytes(404, "文件不存在".encode("utf-8"), "text/plain; charset=utf-8")
             return
 
@@ -3940,8 +3882,6 @@ def main() -> None:
     url = "http://127.0.0.1:5199"
 
     def open_browser() -> None:
-        import time
-
         time.sleep(1)
         webbrowser.open(url)
 
