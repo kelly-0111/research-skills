@@ -828,10 +828,10 @@ def stage_rank(stage: str) -> int:
         return 80
     if "III" in text or "Ⅲ" in text:
         return 70
-    if "II" in text or "Ⅱ" in text:
-        return 60
     if "I/II" in text or "Ⅰ/Ⅱ" in text:
         return 55
+    if "II" in text or "Ⅱ" in text:
+        return 60
     if "Ib" in text or "Ia" in text or "I期" in text or "Ⅰ期" in text:
         return 50
     if "IND" in text:
@@ -848,14 +848,6 @@ def choose_highest_stage(stages: list[str]) -> str:
     if not clean:
         return "待确认"
     return sorted(clean, key=lambda item: (-stage_rank(item), item))[0]
-
-
-def cap_stage_for_drug(drug_or_pipeline: str, stage: str) -> str:
-    for pattern in ALPHAPAI_PIPELINE_PATTERNS:
-        if pattern.get("drug") == drug_or_pipeline and pattern.get("stage_cap"):
-            cap = str(pattern["stage_cap"])
-            return cap if stage_rank(stage) > stage_rank(cap) else stage
-    return stage
 
 
 PIPELINE_FIELDNAMES = [
@@ -1014,8 +1006,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "双抗",
         "indications": ["特应性皮炎", "慢性鼻窦炎伴鼻息肉", "哮喘", "COPD", "慢性自发性荨麻疹"],
         "partners": ["Belenos Biosciences"],
-        "default_stage": "II期",
-        "stage_cap": "II期",
         "deal_upfront": "1500万美元",
         "deal_milestone": "1.7亿美元",
         "deal_equity": "Belenos约30%股权",
@@ -1028,7 +1018,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "ADC",
         "indications": ["胃癌/胃食管结合部癌", "胰腺癌", "胆道癌"],
         "partners": ["阿斯利康(AstraZeneca)"],
-        "default_stage": "III期",
         "deal_upfront": "6300万美元",
         "deal_milestone": "最高11.25亿美元",
     },
@@ -1040,18 +1029,15 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "ADC",
         "indications": ["胃癌/胃食管结合部癌", "胰腺癌", "待细分适应症"],
         "partners": [],
-        "default_stage": "I/II期",
-        "stage_cap": "I/II期",
     },
     {
         "companies": ["康诺亚", "康诺亚-B"],
-        "aliases": ["CM336", "BCMA×CD3", "BCMAxCD3", "BCMA-CD3"],
+        "aliases": ["CM336", "BCMA×CD3", "BCMAxCD3", "BCMA x CD3", "BCMA/CD3", "BCMA-CD3"],
         "drug": "CM336",
         "target": "BCMA×CD3",
         "modality": "双抗",
-        "indications": ["多发性骨髓瘤", "轻链型淀粉样变性", "干燥综合征", "系统性硬化症", "系统性红斑狼疮"],
+        "indications": ["复发/难治性多发性骨髓瘤(RRMM)", "多发性骨髓瘤", "轻链型淀粉样变性", "干燥综合征", "系统性硬化症", "系统性红斑狼疮"],
         "partners": ["Ouro Medicines", "吉利德科学"],
-        "default_stage": "II期",
         "deal_upfront": "1600万美元/二次交易约2.5亿美元",
         "deal_milestone": "最高6.1亿美元/二次交易最高约7000万美元",
     },
@@ -1063,17 +1049,15 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "单抗",
         "indications": ["原发免疫性血小板减少症", "待细分适应症"],
         "partners": ["Timberlyne Therapeutics"],
-        "default_stage": "II期",
     },
     {
         "companies": ["康诺亚", "康诺亚-B"],
-        "aliases": ["CM355", "ICP-B02", "CD20×CD3", "CD20xCD3", "CD20-CD3"],
+        "aliases": ["CM355", "ICP-B02", "CD20×CD3", "CD20xCD3", "CD20 x CD3", "CD20/CD3", "CD20-CD3"],
         "drug": "CM355/ICP-B02(CM355)",
         "target": "CD20×CD3",
         "modality": "双抗",
         "indications": ["系统性硬化症", "系统性红斑狼疮", "待细分适应症"],
         "partners": ["Prolium Biosciences"],
-        "default_stage": "I/II期",
     },
     {
         "companies": ["康诺亚", "康诺亚-B"],
@@ -1083,7 +1067,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "单抗",
         "indications": ["晚期实体瘤", "非霍奇金淋巴瘤", "待细分适应症"],
         "partners": ["诺诚健华"],
-        "default_stage": "I期",
     },
     {
         "companies": ["康诺亚", "康诺亚-B"],
@@ -1093,7 +1076,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "双抗",
         "indications": ["多发性骨髓瘤", "待细分适应症"],
         "partners": [],
-        "default_stage": "I期",
     },
     {
         "companies": ["康诺亚", "康诺亚-B"],
@@ -1103,8 +1085,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "单抗",
         "indications": ["哮喘", "COPD", "慢性鼻窦炎伴鼻息肉", "特应性皮炎"],
         "partners": ["石药集团"],
-        "default_stage": "II期",
-        "stage_cap": "II期",
     },
     {
         "companies": ["乐普生物", "乐普生物-B"],
@@ -1114,7 +1094,6 @@ ALPHAPAI_PIPELINE_PATTERNS = [
         "modality": "ADC",
         "indications": ["胃癌/胃食管结合部癌", "胰腺癌", "胆道癌"],
         "partners": ["阿斯利康(AstraZeneca)"],
-        "default_stage": "III期",
         "deal_upfront": "6300万美元",
         "deal_milestone": "最高11.25亿美元",
     },
@@ -1379,7 +1358,7 @@ def pattern_relevant_text(item: dict[str, Any], aliases: list[str]) -> str:
             pos = lower_chunk.find(alias)
             while pos >= 0:
                 start = max(0, pos - 180)
-                end = min(len(chunk_text), pos + len(alias) + 260)
+                end = min(len(chunk_text), pos + len(alias) + 700)
                 windows.append(chunk_text[start:end])
                 pos = lower_chunk.find(alias, pos + len(alias))
         if windows:
@@ -1392,16 +1371,198 @@ def pattern_relevant_text(item: dict[str, Any], aliases: list[str]) -> str:
     return "\n".join([header, *relevant]).strip()
 
 
-def evidence_sentence(text: str, aliases: list[str], indication: str = "") -> str:
+def project_section_text(item: dict[str, Any], pattern: dict[str, Any]) -> str:
+    """Return project-level sections so one drug's indications do not borrow facts from neighbors."""
+    chunks = item.get("chunks") or []
+    if not isinstance(chunks, list):
+        chunks = [str(chunks)]
+    aliases = [str(alias) for alias in pattern.get("aliases", []) if str(alias).strip()]
+    if not aliases:
+        return ""
+    lower_aliases = [alias.lower() for alias in aliases]
+    section_starts = [
+        r"(?:^|\n|\s)[•·●]\s*(?:CM|AK|MRG|ICP|PRO)[A-Za-z0-9/.-]+",
+        r"(?:^|\n|\s)(?:截至本報告日期，|截至本报告日期，)?(?:CM|AK|MRG)\d{3,}[A-Za-z0-9/.-]*",
+    ]
+    sections: list[str] = []
+    for chunk in chunks:
+        chunk_text = str(chunk)
+        lower_chunk = chunk_text.lower()
+        positions: list[int] = []
+        for alias in lower_aliases:
+            pos = lower_chunk.find(alias)
+            while pos >= 0:
+                positions.append(pos)
+                pos = lower_chunk.find(alias, pos + max(1, len(alias)))
+        for pos in sorted(set(positions))[:4]:
+            start = pos
+            marker_matches = [
+                match for pattern_text in section_starts
+                for match in re.finditer(pattern_text, chunk_text[:pos], flags=re.IGNORECASE)
+            ]
+            if marker_matches and pos - marker_matches[-1].start() <= 80:
+                start = marker_matches[-1].start()
+            end = len(chunk_text)
+            for pattern_text in section_starts:
+                match = re.search(pattern_text, chunk_text[pos + 1:], flags=re.IGNORECASE)
+                if match:
+                    candidate = pos + 1 + match.start()
+                    marker = chunk_text[candidate:candidate + 80].lower()
+                    if not any(alias in marker for alias in lower_aliases):
+                        end = min(end, candidate)
+            section = chunk_text[start:end].strip()
+            if section and section not in sections:
+                sections.append(section)
+    if not sections:
+        return pattern_relevant_text(item, aliases)
+    return "\n".join([str(item.get("title", "")), *sections]).strip()
+
+
+def evidence_sentences(text: str) -> list[str]:
     clean = re.sub(r"\s+", " ", text or "").strip()
-    sentences = [part.strip() for part in re.split(r"(?<=[。；;.!?？])|\n", clean) if part.strip()]
+    return [part.strip() for part in re.split(r"(?<=[。；;.!?？])|\n", clean) if part.strip()]
+
+
+def evidence_sentence(text: str, aliases: list[str], indication: str = "") -> str:
+    sentences = evidence_sentences(text)
     lower_aliases = [alias.lower() for alias in aliases]
     with_alias = [sentence for sentence in sentences if any(alias in sentence.lower() for alias in lower_aliases)]
     if indication:
-        exact = [sentence for sentence in with_alias if indication in sentence]
+        exact = [
+            sentence for sentence in with_alias
+            if any(term.lower() in sentence.lower() for term in indication_terms(indication))
+        ]
         if exact:
-            return exact[0]
+                return exact[0]
     return with_alias[0] if with_alias else ""
+
+
+def indication_stage_context(text: str, aliases: list[str], indication: str) -> str:
+    sentences = evidence_sentences(text)
+    if not sentences:
+        return text or ""
+    lower_aliases = [alias.lower() for alias in aliases]
+    terms = [term.lower() for term in indication_terms(indication)]
+    scored: list[tuple[int, int]] = []
+    for idx, sentence in enumerate(sentences):
+        lower = sentence.lower()
+        has_indication = any(term in lower for term in terms)
+        if not has_indication:
+            continue
+        score = 10
+        if any(alias in lower for alias in lower_aliases):
+            score += 10
+        if detect_stage(sentence) != "待确认":
+            score += 5
+        scored.append((score, idx))
+    if not scored:
+        return evidence_sentence(text, aliases, indication) or evidence_sentence(text, aliases) or text
+    _score, idx = sorted(scored, key=lambda item: (-item[0], item[1]))[0]
+    start = max(0, idx - 1)
+    end = min(len(sentences), idx + 2)
+    return " ".join(sentences[start:end])
+
+
+def other_pipeline_alias_hits(text: str, current_pattern: dict[str, Any]) -> list[str]:
+    lower = (text or "").lower()
+    current_aliases = {alias.lower() for alias in current_pattern.get("aliases", [])}
+    hits: list[str] = []
+    for pattern in ALPHAPAI_PIPELINE_PATTERNS:
+        if pattern is current_pattern:
+            continue
+        for alias in pattern.get("aliases", []):
+            alias_text = str(alias).strip()
+            alias_lower = alias_text.lower()
+            if len(alias_text) < 4 or alias_lower in current_aliases:
+                continue
+            if alias_lower in lower:
+                hits.append(str(pattern.get("drug", alias_text)))
+                break
+    return list(dict.fromkeys(hits))
+
+
+def indication_terms(indication: str) -> list[str]:
+    mapping = {
+        "复发/难治性多发性骨髓瘤(RRMM)": ["复发/难治性多发性骨髓瘤", "复发或难治性多发性骨髓瘤", "復發或難治性多發性骨髓瘤", "RRMM", "R/R MM"],
+        "多发性骨髓瘤": ["多发性骨髓瘤", "多發性骨髓瘤", "multiple myeloma", "MM"],
+        "胃癌/胃食管结合部癌": ["胃癌", "胃食管", "GC/AEG", "GEJ"],
+        "慢性鼻窦炎伴鼻息肉": ["慢性鼻窦炎伴鼻息肉", "慢性鼻竇炎伴鼻息肉", "CRSwNP", "CRSw NP", "鼻息肉"],
+        "季节性过敏性鼻炎": ["季节性过敏性鼻炎", "季節性過敏性鼻炎", "SAR"],
+        "特应性皮炎": ["特应性皮炎", "特應性皮炎", "atopic dermatitis"],
+        "青少年/儿童特应性皮炎": ["青少年中重度AD", "儿童中重度AD", "青少年特应性皮炎", "儿童特应性皮炎"],
+        "结节性痒疹": ["结节性痒疹", "結節性癢疹", "PN"],
+        "胰腺癌": ["胰腺癌", "胰臟癌"],
+        "胆道癌": ["胆道癌", "膽道癌", "胆管癌", "膽管癌"],
+        "系统性硬化症": ["系统性硬化症", "系統性硬化症", "SSc"],
+        "系统性红斑狼疮": ["系统性红斑狼疮", "系統性紅斑狼瘡", "SLE"],
+        "原发免疫性血小板减少症": ["原发免疫性血小板减少症", "原發免疫性血小板減少症", "免疫性血小板减少症", "ITP"],
+        "轻链型淀粉样变性": ["轻链型淀粉样变性", "輕鏈型澱粉樣變性", "原發性輕鏈型澱粉樣變性", "AL"],
+        "非霍奇金淋巴瘤": ["非霍奇金淋巴瘤", "非霍奇金淋巴瘤", "B-NHL", "NHL"],
+        "晚期实体瘤": ["晚期实体瘤", "晚期實體瘤", "实体瘤", "實體瘤"],
+    }
+    return mapping.get(indication, [indication])
+
+
+def stage_match_spans(text: str) -> list[tuple[int, int, str]]:
+    checks = [
+        (r"获批上市|獲批上市|批准上市|已上市|納入醫保|纳入医保|获NMPA批准|獲NMPA批准|上市申请.{0,30}批准|上市申請.{0,30}批准|已获批|已獲批|获批治疗|獲批治療|适应症.{0,20}获批|適應症.{0,20}獲批|获批该适应症|獲批該適應症|獲批", "已上市"),
+        (r"BLA|NDA|sNDA|上市申请|新药上市申请|获受理|优先审评|申报上市|递交全球上市申请", "NDA/BLA"),
+        (r"(?<!I)III\s*期|Ⅲ\s*期|三期|3\s*期|注册性临床", "III期"),
+        (r"I/II\s*期|Ⅰ/Ⅱ\s*期|1/2\s*期", "I/II期"),
+        (r"(?<!I)II\s*期|Ⅱ\s*期|二期|2\s*期", "II期"),
+        (r"(?<!I)I\s*期|Ⅰ\s*期|一期|1\s*期", "I期"),
+        (r"IND|临床试验申请|申报临床", "IND申报"),
+        (r"研究者发起|研究者發起|探索性研究|IIT", "研究者发起"),
+    ]
+    spans: list[tuple[int, int, str]] = []
+    for pattern, stage in checks:
+        for match in re.finditer(pattern, text or "", flags=re.IGNORECASE):
+            spans.append((match.start(), match.end(), stage))
+    return spans
+
+
+def detect_stage_for_indication(text: str, indication: str) -> str:
+    if not text:
+        return "待确认"
+    sentences = evidence_sentences(text)
+    terms = [term.lower() for term in indication_terms(indication)]
+    for sentence in sentences:
+        lower_sentence = sentence.lower()
+        if any(term in lower_sentence for term in terms) and any(word in sentence for word in ["研究者发起", "研究者發起", "探索性研究", "IIT"]):
+            return "研究者发起"
+    term_positions = [
+        match.start()
+        for term in indication_terms(indication)
+        for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE)
+    ]
+    spans = stage_match_spans(text)
+    if term_positions and spans:
+        ranked: list[tuple[int, int, str]] = []
+        for pos in term_positions:
+            for span_start, _span_end, stage in spans:
+                ranked.append((abs(pos - span_start), span_start, stage))
+        distance, _span_start, stage = sorted(ranked, key=lambda item: (item[0], item[1]))[0]
+        if distance <= 140:
+            return stage
+    return detect_stage(text)
+
+
+def stage_supported_for_indication(text: str, indication: str, stage: str) -> bool:
+    if not text or not indication or stage == "待确认":
+        return False
+    term_positions = [
+        match.start()
+        for term in indication_terms(indication)
+        for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE)
+    ]
+    if not term_positions:
+        return False
+    spans = [span for span in stage_match_spans(text) if span[2] == stage]
+    if not spans:
+        return False
+    if stage == "已上市" and any(word in text for word in ["适应症相继获批", "三大适应症", "获批上市", "批准上市"]):
+        return True
+    return any(abs(pos - span_start) <= 90 for pos in term_positions for span_start, _span_end, _stage in spans)
 
 
 def source_confidence(source_type: str) -> str:
@@ -1419,18 +1580,29 @@ def clip_text(text: str, limit: int = 220) -> str:
 
 def detect_stage(text: str) -> str:
     checks = [
-        (r"获批上市|批准上市|已上市|纳入医保|获NMPA批准", "已上市"),
+        (r"获批上市|獲批上市|批准上市|已上市|納入醫保|纳入医保|获NMPA批准|獲NMPA批准|上市申请.{0,30}批准|上市申請.{0,30}批准|已获批|已獲批|获批治疗|獲批治療|适应症.{0,20}获批|適應症.{0,20}獲批|获批该适应症|獲批該適應症|獲批", "已上市"),
         (r"BLA|NDA|sNDA|上市申请|新药上市申请|获受理|优先审评|申报上市|递交全球上市申请", "NDA/BLA"),
-        (r"III\s*期|Ⅲ\s*期|三期|3\s*期|注册性临床", "III期"),
+        (r"(?<!I)III\s*期|Ⅲ\s*期|三期|3\s*期|注册性临床", "III期"),
         (r"I/II\s*期|Ⅰ/Ⅱ\s*期|1/2\s*期", "I/II期"),
-        (r"II\s*期|Ⅱ\s*期|二期|2\s*期", "II期"),
-        (r"I\s*期|Ⅰ\s*期|一期|1\s*期", "I期"),
+        (r"(?<!I)II\s*期|Ⅱ\s*期|二期|2\s*期", "II期"),
+        (r"(?<!I)I\s*期|Ⅰ\s*期|一期|1\s*期", "I期"),
         (r"IND|临床试验申请|申报临床", "IND申报"),
     ]
     for pattern, stage in checks:
         if re.search(pattern, text, flags=re.IGNORECASE):
             return stage
     return "待确认"
+
+
+def refine_stage_for_indication(text: str, indication: str, stage: str) -> str:
+    if indication == "复发/难治性多发性骨髓瘤(RRMM)":
+        has_i_ii = re.search(r"I/II\s*期|Ⅰ/Ⅱ\s*期|1/2\s*期", text or "", flags=re.IGNORECASE)
+        has_iii_enroll = re.search(r"III\s*期|Ⅲ\s*期|三期", text or "", flags=re.IGNORECASE) and any(
+            word in (text or "") for word in ["入组", "入組", "患者入组", "患者入組"]
+        )
+        if has_i_ii and has_iii_enroll:
+            return "I/II期；III期入组中"
+    return stage
 
 
 def detect_indications(text: str) -> list[str]:
@@ -1441,18 +1613,19 @@ def detect_indications(text: str) -> list[str]:
         (["实体瘤", "晚期实体瘤"], "晚期实体瘤"),
         (["非霍奇金淋巴瘤", "NHL"], "非霍奇金淋巴瘤"),
         (["结直肠癌", "CRC", "mCRC"], "结直肠癌"),
-        (["胰腺癌"], "胰腺癌"),
-        (["胆道癌", "胆管癌"], "胆道癌"),
+        (["胰腺癌", "胰臟癌"], "胰腺癌"),
+        (["胆道癌", "膽道癌", "胆管癌", "膽管癌"], "胆道癌"),
         (["头颈"], "头颈鳞癌"),
         (["特应性皮炎", "atopic dermatitis"], "特应性皮炎"),
         (["青少年中重度AD", "儿童中重度AD"], "青少年/儿童特应性皮炎"),
-        (["慢性鼻窦炎伴鼻息肉", "CRSwNP", "鼻息肉"], "慢性鼻窦炎伴鼻息肉"),
+        (["慢性鼻窦炎伴鼻息肉", "慢性鼻竇炎伴鼻息肉", "CRSwNP", "CRSw NP", "鼻息肉"], "慢性鼻窦炎伴鼻息肉"),
         (["季节性过敏性鼻炎", "SAR"], "季节性过敏性鼻炎"),
         (["结节性痒疹", "PN"], "结节性痒疹"),
         (["哮喘"], "哮喘"),
         (["COPD", "慢性阻塞性肺疾病"], "COPD"),
         (["荨麻疹", "CSU"], "慢性自发性荨麻疹"),
-        (["多发性骨髓瘤"], "多发性骨髓瘤"),
+        (["复发/难治性多发性骨髓瘤", "復發或難治性多發性骨髓瘤", "RRMM", "R/R MM"], "复发/难治性多发性骨髓瘤(RRMM)"),
+        (["多发性骨髓瘤", "多發性骨髓瘤"], "多发性骨髓瘤"),
         (["原发免疫性血小板减少症", "免疫性血小板减少症", "ITP"], "原发免疫性血小板减少症"),
         (["轻链型淀粉样变性"], "轻链型淀粉样变性"),
         (["干燥综合征"], "干燥综合征"),
@@ -1682,7 +1855,7 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
             and any(alias.lower() in text.lower() for alias in pattern["aliases"])
         ]
         for pattern in matched_patterns:
-            relevant_text = pattern_relevant_text(item, pattern["aliases"])
+            relevant_text = project_section_text(item, pattern)
             if not relevant_text:
                 continue
             detected_indications = detect_indications(relevant_text)
@@ -1698,21 +1871,32 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
             window = detect_window(relevant_text)
             for indication in indications:
                 row_evidence = evidence_sentence(relevant_text, pattern["aliases"], indication)
-                row_text = row_evidence or evidence_sentence(relevant_text, pattern["aliases"]) or relevant_text
+                stage_context = indication_stage_context(relevant_text, pattern["aliases"], indication)
+                row_text = row_evidence or stage_context or evidence_sentence(relevant_text, pattern["aliases"]) or relevant_text
                 row_confidence = confidence
                 row_notes = ["AlphaPai投研资料抽取；关键事实以来源索引回溯"]
                 if row_evidence:
                     row_notes.append(f"来源句：{clip_text(row_evidence, 160)}")
+                    other_hits = other_pipeline_alias_hits(row_evidence, pattern)
+                    if other_hits:
+                        row_confidence = "低"
+                        row_notes.append(f"来源句同时命中其他项目({';'.join(other_hits[:3])})，疑似项目污染，阶段/适应症需人工核验")
                 else:
                     row_confidence = "低"
                     row_notes.append("未找到同时命中药物别名和该适应症的来源句，阶段/适应症需人工核验")
-                stage = detect_stage(row_text)
-                if stage == "已上市" and not pattern.get("listed"):
-                    stage = pattern.get("default_stage", "待确认")
-                if pattern.get("stage_cap") and stage_rank(stage) > stage_rank(str(pattern["stage_cap"])):
-                    stage = str(pattern["stage_cap"])
-                if row_confidence == "低" and stage != "待确认":
-                    row_notes.append(f"低可信来源不确认研发阶段，原自动抽取阶段为 {stage}")
+                evidence_stage = detect_stage_for_indication(row_evidence, indication) if row_evidence else "待确认"
+                stage = evidence_stage if evidence_stage != "待确认" else detect_stage_for_indication(stage_context or row_text, indication)
+                stage_evidence_text = stage_context or row_text
+                if stage != "待确认" and not stage_supported_for_indication(stage_evidence_text, indication, stage):
+                    row_notes.append(f"来源句未能证明 {indication} 对应 {stage}，阶段留待核验")
+                    stage = "待确认"
+                stage = refine_stage_for_indication(relevant_text, indication, stage)
+                has_direct_fact = bool(row_evidence) and stage != "待确认"
+                if row_confidence == "低" and has_direct_fact:
+                    row_confidence = "中"
+                    row_notes.append("AlphaPai召回句同时命中药物、适应症和阶段，按可用线索填表；来源类型低于公告级")
+                elif row_confidence == "低" and stage != "待确认":
+                    row_notes.append(f"低可信来源未形成直接项目-适应症-阶段证据，原自动抽取阶段为 {stage}")
                     stage = "待确认"
                 progress = clip_text(f"{item.get('title', '')}：{row_text}", 240)
                 pipeline_rows.append(
@@ -1727,8 +1911,8 @@ def extract_alphapai_rows(company: str, items: list[dict[str, Any]]) -> tuple[li
                         "progress_date": publish_date or "待确认",
                         "next_catalyst": detect_next_milestone(relevant_text, stage, pattern["drug"], indication, window),
                         "next_catalyst_date_or_window": window,
-                        "competitive_landscape": "AlphaPai召回资料提及，需结合同靶点竞品继续核验",
-                        "risks": "临床数据、监管审批、商业化及BD兑现不确定性",
+                        "competitive_landscape": "",
+                        "risks": "",
                         "source": source,
                         "source_confidence": row_confidence,
                         "last_verified_at": today,
@@ -1831,6 +2015,8 @@ def collapse_pipeline_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if key not in grouped:
             grouped[key] = dict(row)
             buckets[key] = {"stages": [], "dates": [], "progress": [], "sources": [], "windows": [], "milestones": [], "notes": []}
+        elif pipeline_row_quality(row) > pipeline_row_quality(grouped[key]):
+            grouped[key] = dict(row)
         bucket = buckets[key]
         for field, target in [
             ("clinical_stage", "stages"),
@@ -1847,9 +2033,8 @@ def collapse_pipeline_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     collapsed = []
     for key, row in grouped.items():
         bucket = buckets[key]
-        row["clinical_stage"] = cap_stage_for_drug(row.get("drug_or_pipeline", ""), choose_highest_stage(bucket["stages"]))
+        row["clinical_stage"] = row.get("clinical_stage", "待确认")
         row["progress_date"] = latest_date(bucket["dates"])
-        row["latest_progress"] = bucket["progress"][0] if bucket["progress"] else row.get("latest_progress", "")
         row["source"] = "；".join(bucket["sources"][:3])
         row["next_catalyst_date_or_window"] = latest_date(bucket["windows"])
         chosen_milestone = choose_best_milestone(bucket["milestones"])
@@ -1919,6 +2104,25 @@ def collapse_bd_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 existing["latest_update_date"] = row.get("latest_update_date", existing.get("latest_update_date", ""))
                 existing["latest_progress"] = row.get("latest_progress", existing.get("latest_progress", ""))
     return list(grouped.values())
+
+
+def pipeline_row_quality(row: dict[str, Any]) -> int:
+    notes = row.get("verification_notes", "")
+    score = confidence_rank(row.get("source_confidence", "")) * 300
+    score += stage_rank(row.get("clinical_stage", "")) * 5
+    if row.get("clinical_stage") and row.get("clinical_stage") != "待确认":
+        score += 20
+    if "来源句：" in notes:
+        score += 40
+    if "AlphaPai:ann:" in row.get("source", ""):
+        score += 80
+    elif "AlphaPai:report:" in row.get("source", ""):
+        score += 30
+    if any(word in notes for word in ["污染", "未找到同时命中", "未能证明", "低可信来源"]):
+        score -= 120
+    if row.get("indication") == "待细分适应症":
+        score -= 50
+    return score
 
 
 def verification_rows_from_pipeline(rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -2037,6 +2241,41 @@ def combine_deal_value(row: dict[str, str]) -> str:
     ]
     clean = [part for part in parts if part and part != "待确认"]
     return "+".join(dict.fromkeys(clean))
+
+
+def field_trust_tier(row_or_confidence: dict[str, str] | str) -> str:
+    if isinstance(row_or_confidence, dict):
+        confidence = row_or_confidence.get("source_confidence", "")
+    else:
+        confidence = row_or_confidence
+    if confidence == "高":
+        return "公告级"
+    if confidence == "中":
+        return "研报推断"
+    return "待核验"
+
+
+def aggregate_trust_tier(values: list[str]) -> str:
+    clean = [value for value in values if value and value != "待确认"]
+    if not clean or any(value == "低" for value in clean):
+        return "待核验"
+    if all(value == "高" for value in clean):
+        return "公告级"
+    return "研报推断"
+
+
+def display_deal_value(row: dict[str, str]) -> str:
+    value = combine_deal_value(row)
+    if not value or "待按单笔交易核验" in value or value == "待确认":
+        return ""
+    return value
+
+
+def display_milestone_window(row: dict[str, str]) -> str:
+    if field_trust_tier(row) != "公告级":
+        return ""
+    value = row.get("next_catalyst_date_or_window") or row.get("next_milestone_date_or_window") or ""
+    return "" if value == "待确认" else value
 
 
 def clean_company_display_name(company_name: str) -> str:
@@ -2262,6 +2501,22 @@ def sanitize_pipeline_row(row: dict[str, str]) -> dict[str, str]:
     notes = [clean.get("verification_notes", "")]
     clean["source_confidence"] = normalize_confidence(clean)
 
+    evidence_text = join_unique_values([progress, clean.get("verification_notes", "")])
+    evidence_stage = detect_stage_for_indication(evidence_text, indication)
+    if evidence_stage != "待确认" and clean["source_confidence"] != "低":
+        refined_stage = refine_stage_for_indication(evidence_text, indication, evidence_stage)
+        should_replace_stage = (
+            not stage
+            or stage == "待确认"
+            or stage_rank(refined_stage) >= stage_rank(stage)
+            or "来源句未能证明" in clean.get("verification_notes", "")
+        )
+        if should_replace_stage and refined_stage != stage:
+            notes.append(f"按本行适应症附近证据重算研发阶段：{stage or '空'} -> {refined_stage}")
+        if should_replace_stage:
+            clean["clinical_stage"] = refined_stage
+            stage = refined_stage
+
     if clean["source_confidence"] == "低":
         notes.append("来源线索/待复核")
         if stage and stage != "待确认":
@@ -2272,35 +2527,24 @@ def sanitize_pipeline_row(row: dict[str, str]) -> dict[str, str]:
         clean["source_confidence"] = "低"
         notes.append("适应症未拆到具体疾病，不能作为项目级事实，需回公告/临床登记核验")
 
-    if "CM326" in drug and "CM350" in progress:
-        clean["clinical_stage"] = "待确认"
-        clean["source_confidence"] = "低"
-        notes.append("疑似项目污染: CM326 行出现 CM350 描述，需回到项目窗口核验")
-
-    if "CM336" in drug and stage == "NDA/BLA":
-        clean["clinical_stage"] = "待确认"
-        clean["source_confidence"] = "低"
-        notes.append("CM336 多适应症阶段疑似被未来申报/其他项目污染，需逐适应症核验")
-
-    if clean["source_confidence"] != "低" and ("CMG901" in drug or "AZD0901" in drug) and stage == "NDA/BLA":
-        if not re.search(r"已获.*受理|获.*受理|已递交|已提交|审评中", progress):
-            clean["clinical_stage"] = "III期"
-            notes.append("CMG901/AZD0901 的 NDA/BLA 未见明确已受理/审评中证据，按未来申报预期处理，当前阶段降为 III期/待核验")
-
-    if clean["source_confidence"] != "低" and "CM310" in drug and stage == "已上市":
-        if indication in {"青少年/儿童特应性皮炎", "结节性痒疹"}:
-            clean["clinical_stage"] = "NDA/BLA"
-            notes.append("CM310 该适应症不直接按已上市处理，需核验受理/审评/获批状态")
-        elif indication == "哮喘":
-            clean["clinical_stage"] = "III期"
-            notes.append("CM310 哮喘不直接按已上市处理，需核验临床阶段")
-
     clean["verification_notes"] = "；".join(dict.fromkeys(note for note in notes if note))
     return clean
 
 
 def sanitize_pipeline_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    return [sanitize_pipeline_row(row) for row in rows]
+    cleaned = [sanitize_pipeline_row(row) for row in rows]
+    specific_mm_keys = {
+        (row.get("company_name", ""), row.get("drug_or_pipeline", ""))
+        for row in cleaned
+        if row.get("indication") == "复发/难治性多发性骨髓瘤(RRMM)"
+    }
+    return [
+        row for row in cleaned
+        if not (
+            row.get("indication") == "多发性骨髓瘤"
+            and (row.get("company_name", ""), row.get("drug_or_pipeline", "")) in specific_mm_keys
+        )
+    ]
 
 
 def expand_bd_rows_by_partner(rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -2332,30 +2576,30 @@ def cm310_revenue_template_rows(company_rows: list[dict[str, str]], pipeline_row
         {
             "indication": "成人中重度特应性皮炎(AD)",
             "reimbursed": "是/待核验医保支付范围",
-            "patients": "初始口径: 中国成人中重度AD可治疗患者池",
-            "treatable": "情景: 30%/40%/50%",
-            "penetration": "情景: 1%/3%/5%",
+            "patients": "待填: 流行病学/指南/券商深度核验",
+            "treatable": "待填",
+            "penetration": "待填",
             "cost": "待核价: 医保后年治疗费用",
-            "peak": "患者池×可治疗比例×渗透率×年治疗费用",
-            "revenue_2026": "放量初期: 峰值5%-10%",
-            "revenue_2027": "放量爬坡: 峰值10%-20%",
-            "revenue_2028": "放量爬坡: 峰值20%-35%",
-            "gross_margin": "参考Biotech抗体药: 75%-85%",
-            "selling_ratio": "商业化初期: 35%-55%",
+            "peak": "公式待填: 患者池×可治疗比例×渗透率×年治疗费用",
+            "revenue_2026": "待填",
+            "revenue_2027": "待填",
+            "revenue_2028": "待填",
+            "gross_margin": "待填: 公司财报口径",
+            "selling_ratio": "待填: 公司财报口径",
         },
         {
             "indication": "成人慢性鼻窦炎伴鼻息肉(CRSwNP)",
             "reimbursed": "是/待核验适应症支付范围",
-            "patients": "初始口径: 中重度/手术后复发CRSwNP患者池",
-            "treatable": "情景: 20%/30%/40%",
-            "penetration": "情景: 1%/2%/4%",
+            "patients": "待填: 流行病学/指南/券商深度核验",
+            "treatable": "待填",
+            "penetration": "待填",
             "cost": "待核价: 医保后年治疗费用",
-            "peak": "患者池×可治疗比例×渗透率×年治疗费用",
-            "revenue_2026": "适应症拓展初期: 峰值3%-8%",
-            "revenue_2027": "医院准入爬坡: 峰值8%-15%",
-            "revenue_2028": "放量爬坡: 峰值15%-25%",
-            "gross_margin": "参考Biotech抗体药: 75%-85%",
-            "selling_ratio": "商业化初期: 35%-55%",
+            "peak": "公式待填: 患者池×可治疗比例×渗透率×年治疗费用",
+            "revenue_2026": "待填",
+            "revenue_2027": "待填",
+            "revenue_2028": "待填",
+            "gross_margin": "待填: 公司财报口径",
+            "selling_ratio": "待填: 公司财报口径",
         },
         {
             "indication": "其他适应症/待核验",
@@ -2409,7 +2653,7 @@ def cm310_revenue_template_rows(company_rows: list[dict[str, str]], pipeline_row
             item["gross_margin"],
             item["selling_ratio"],
             "收入×毛利率-收入×销售费用率",
-            "初始假设/需数值核验",
+            "人工核验后填",
             "医保目录、年报、业绩会、券商深度、流行病学/指南、中标价/支付价",
         ])
     return rows
@@ -2516,7 +2760,7 @@ def fetch_market_validation_data(company_rows: list[dict[str, str]]) -> dict[str
         code, market = parse_primary_ticker(row.get("tickers_raw", "") or row.get("ticker", ""))
         klines = klines_by_company.get(company, [])
         if not klines:
-            output[company] = {"status": "东方财富行情待拉取/失败", "judgement": "未验证"}
+            output[company] = {"status": "行情待接入", "judgement": "人工核验后填"}
             continue
         index_rows = index_cache.setdefault(market, fetch_index_klines_for_market(market))
         returns = {days: pct_return_from_klines(klines, days) for days in (1, 5, 20, 60)}
@@ -2612,12 +2856,12 @@ def market_validation_template_rows(company_rows: list[dict[str, str]], catalyst
             rows.append([
                 data.get("latest_date") or catalyst.get("announced_date", "") or catalyst.get("date_or_window", ""),
                 company,
-                data.get("return_summary", "待拉取"),
-                data.get("amount_summary", "待拉取"),
-                data.get("relative_return_summary", "待拉取"),
+                data.get("return_summary", ""),
+                data.get("amount_summary", ""),
+                data.get("relative_return_summary", ""),
                 report_event_summary(catalyst, 80),
                 data.get("judgement", "未验证；禁止写上涨逻辑成立"),
-                data.get("status", "缺行情数据"),
+                data.get("status", "行情待接入"),
             ])
     else:
         for company in companies[:8] or ["待补充"]:
@@ -2625,22 +2869,37 @@ def market_validation_template_rows(company_rows: list[dict[str, str]], catalyst
             rows.append([
                 data.get("latest_date", "待填"),
                 company,
-                data.get("return_summary", "待拉取"),
-                data.get("amount_summary", "待拉取"),
-                data.get("relative_return_summary", "待拉取"),
+                data.get("return_summary", ""),
+                data.get("amount_summary", ""),
+                data.get("relative_return_summary", ""),
                 "待填",
                 data.get("judgement", "未验证"),
-                data.get("status", "缺行情数据"),
+                data.get("status", "行情待接入"),
             ])
     return rows
 
 
 def write_innovative_drug_excel(out_dir: Path) -> Path:
     company_rows = read_csv_rows(out_dir / "company_master.csv")
-    pipeline_rows = sanitize_pipeline_rows(read_csv_rows(out_dir / "pipeline_progress_seed.csv"))
+    pipeline_rows_all = sanitize_pipeline_rows(read_csv_rows(out_dir / "pipeline_progress_seed.csv"))
+    pipeline_rows = [
+        row for row in pipeline_rows_all
+        if row.get("source_confidence") != "低"
+        and row.get("clinical_stage") not in {"", "待确认"}
+        and row.get("indication") != "待细分适应症"
+    ]
     catalyst_rows = read_csv_rows(out_dir / "catalyst_tracker_seed.csv")
     bd_rows = expand_bd_rows_by_partner(read_csv_rows(out_dir / "bd_deal_tracker_seed.csv"))
     verification_rows = read_csv_rows(out_dir / "verification_queue.csv")
+    existing_verification_keys = {
+        (row.get("company_name", ""), row.get("missing_item", ""), row.get("source", ""))
+        for row in verification_rows
+    }
+    for row in verification_rows_from_pipeline(pipeline_rows_all):
+        key = (row.get("company_name", ""), row.get("missing_item", ""), row.get("source", ""))
+        if key not in existing_verification_keys:
+            verification_rows.append(row)
+            existing_verification_keys.add(key)
     source_manifest_rows = read_csv_rows(out_dir / "source_manifest_alphapai.csv")
     source_manifest_rows.extend(read_csv_rows(out_dir / "source_manifest.csv"))
     source_manifest_rows.extend(official_source_seed_rows(company_rows))
@@ -2670,7 +2929,7 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
                 "progress": [],
                 "catalysts": [],
                 "catalyst_windows": [],
-                "source_confidence": row.get("source_confidence", ""),
+                "confidences": [],
             },
         )
         for field, bucket in [
@@ -2684,17 +2943,20 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             value = row.get(field, "")
             if value and value not in item[bucket]:
                 item[bucket].append(value)
+        confidence = row.get("source_confidence", "")
+        if confidence and confidence not in item["confidences"]:
+            item["confidences"].append(confidence)
 
     overview = [[
         "治疗领域", "靶点", "药物名称", "项目编号", "药物类型", "适应症数量",
-        "最高研发阶段", "最新进展时间", "下一里程碑时间", "BD合作方", "BD交易金额"
+        "最高研发阶段", "最新进展时间", "下一里程碑时间", "BD合作方", "BD交易金额", "字段可信度"
     ]]
     for item in overview_map.values():
         company = item["company_name"]
         company_tags = company_by_name.get(company, {}).get("disease_area_tags", "")
         matching_bd = bd_by_key.get((company, item["project_code"]), []) or bd_by_key.get((company, item["drug_name"]), [])
         partners = "；".join(dict.fromkeys(row.get("partner", "") for row in matching_bd if row.get("partner", "") and row.get("partner", "") != "待确认"))
-        deal_values = "；".join(dict.fromkeys(combine_deal_value(row) for row in matching_bd if combine_deal_value(row)))
+        deal_values = "；".join(dict.fromkeys(display_deal_value(row) for row in matching_bd if display_deal_value(row)))
         overview.append(
             [
                 therapeutic_area_from_indications(item["indications"], company_tags),
@@ -2705,24 +2967,25 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
                 len(item["indications"]),
                 choose_highest_stage(item["stages"]),
                 "；".join([value for value in item["progress_dates"] if value != "待确认"]) or "待确认",
-                "；".join([value for value in item["catalyst_windows"] if value != "待确认"]) or "待确认",
+                "；".join([value for value in item["catalyst_windows"] if value != "待确认"]) if aggregate_trust_tier(item["confidences"]) == "公告级" else "",
                 partners,
                 deal_values,
+                aggregate_trust_tier(item["confidences"]),
             ]
         )
     if len(overview) == 1:
-        overview.append(["待补充", "", "", "", "", "", "待确认", "待确认", "待确认", "", ""])
+        overview.append(["待补充", "", "", "", "", "", "待确认", "待确认", "", "", "", "待核验"])
 
     summary = [[
         "公司名称", "治疗领域", "靶点", "药物名称", "项目编号", "药物类型",
-        "适应症数量", "最高研发阶段", "最新进展时间", "BD合作方", "BD交易金额", "下一里程碑时间"
+        "适应症数量", "最高研发阶段", "最新进展时间", "BD合作方", "BD交易金额", "下一里程碑时间", "字段可信度"
     ]]
     for item in overview_map.values():
         company = item["company_name"]
         company_tags = company_by_name.get(company, {}).get("disease_area_tags", "")
         matching_bd = bd_by_key.get((company, item["project_code"]), []) or bd_by_key.get((company, item["drug_name"]), [])
         partners = join_unique_values([row.get("partner", "") for row in matching_bd])
-        deal_values = join_unique_values([combine_deal_value(row) for row in matching_bd])
+        deal_values = join_unique_values([display_deal_value(row) for row in matching_bd])
         summary.append([
             company,
             therapeutic_area_from_indications(item["indications"], company_tags),
@@ -2735,14 +2998,15 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             join_unique_values([value for value in item["progress_dates"] if value != "待确认"], "待确认"),
             partners,
             deal_values,
-            join_unique_values([value for value in item["catalyst_windows"] if value != "待确认"], "待确认"),
+            join_unique_values([value for value in item["catalyst_windows"] if value != "待确认"], "") if aggregate_trust_tier(item["confidences"]) == "公告级" else "",
+            aggregate_trust_tier(item["confidences"]),
         ])
     if len(summary) == 1:
-        summary.append(["待补充", "", "", "", "", "", 0, "待确认", "待确认", "", "", "待确认"])
+        summary.append(["待补充", "", "", "", "", "", 0, "待确认", "待确认", "", "", "", "待核验"])
 
     detail = [[
         "公司名称", "靶点", "药物/项目编号", "药物类型", "适应症", "研发阶段", "最新进展",
-        "进展时间", "下一里程碑", "下一里程碑时间", "update_needed", "置信度",
+        "进展时间", "下一里程碑", "下一里程碑时间", "update_needed", "字段可信度",
         "来源类型/具体来源", "source_note"
     ]]
     for row in pipeline_rows:
@@ -2758,9 +3022,9 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             report_progress_summary(row, 120),
             row.get("progress_date", ""),
             row.get("next_catalyst", ""),
-            row.get("next_catalyst_date_or_window", ""),
+            display_milestone_window(row),
             update_needed,
-            confidence,
+            field_trust_tier(row),
             source_brief(row.get("source", "")),
             row.get("verification_notes", ""),
         ])
@@ -2782,10 +3046,10 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
 
     bd_sheet = [[
         "公司名称", "靶点", "药物/项目编号", "药物类型", "合作方", "BD交易金额/结构",
-        "授权区域", "覆盖适应症", "交易类型/关键日期", "最新进展/下一节点", "置信度", "来源/核验"
+        "授权区域", "覆盖适应症", "交易类型/关键日期", "最新进展/下一节点", "字段可信度", "来源/核验"
     ]]
     for row in bd_rows:
-        deal_value = combine_deal_value(row)
+        deal_value = display_deal_value(row)
         key_dates = []
         for label, field in [
             ("公告", "announcement_date"),
@@ -2812,20 +3076,20 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             row.get("drug_or_pipeline", ""),
             row.get("modality", ""),
             row.get("partner", ""),
-            deal_value or "待确认",
+            deal_value,
             row.get("territory", ""),
             join_unique_segments(row.get("covered_indications", "")),
             join_unique_values([row.get("deal_type", ""), "；".join(key_dates)]),
             "；".join(progress_parts),
-            row.get("source_confidence", ""),
+            field_trust_tier(row),
             source_note,
         ])
     if len(bd_sheet) == 1:
-        bd_sheet.append(["待补充", "", "", "", "", "", "", "", "", "暂无BD交易种子", "待确认", ""])
+        bd_sheet.append(["待补充", "", "", "", "", "", "", "", "", "暂无BD交易种子", "待核验", ""])
 
     catalyst_sheet = [[
         "日期/窗口", "公告日期", "预计时间", "实际日期", "公司名称", "药物/管线",
-        "事件类型", "事件内容", "状态", "结果", "预期影响", "来源"
+        "事件类型", "事件内容", "状态", "结果", "字段可信度", "来源"
     ]]
     for row in catalyst_rows:
         catalyst_sheet.append([
@@ -2839,7 +3103,7 @@ def write_innovative_drug_excel(out_dir: Path) -> Path:
             row.get("event_summary", ""),
             row.get("status", ""),
             row.get("result", ""),
-            row.get("expected_impact", ""),
+            field_trust_tier("低" if "social_media" in row.get("source", "") else "中"),
             source_brief(row.get("source", "")),
         ])
 
